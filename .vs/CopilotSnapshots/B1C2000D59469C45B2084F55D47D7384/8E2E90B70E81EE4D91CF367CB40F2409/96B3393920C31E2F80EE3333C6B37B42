@@ -1,0 +1,85 @@
+﻿using api.Data;
+using api.DTOs.Option;
+using api.Interfaces.IRepositories;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Repositories
+{
+    public class OptionRepository : IOptionRepository
+    {
+        private readonly ApplicationDbContext _context;
+        public OptionRepository(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+        public async Task<IEnumerable<OptionDto>> GetAllAsync()
+        {
+            return await _context.Options.Select(o => new OptionDto
+            {
+                Id = o.Id,
+                QuestionId = o.QuestionId,
+                Content = o.Content,
+                Value = o.Value
+            }).ToListAsync();
+        }
+        public async Task<OptionDto?> GetByIdAsync(int id)
+        {
+            var o = await _context.Options.FindAsync(id);
+            if (o == null) return null;
+            return new OptionDto
+            {
+                Id = o.Id,
+                QuestionId = o.QuestionId,
+                Content = o.Content,
+                Value = o.Value
+            };
+        }
+        public async Task<OptionDto> CreateAsync(CreateOptionDto dto)
+        {
+            var o = new Option
+            {
+                QuestionId = dto.QuestionId,
+                Content = dto.Content,
+                Value = dto.Value
+            };
+            _context.Options.Add(o);
+            await _context.SaveChangesAsync();
+            return new OptionDto
+            {
+                Id = o.Id,
+                QuestionId = o.QuestionId,
+                Content = o.Content,
+                Value = o.Value
+            };
+        }
+        public async Task<OptionDto?> UpdateAsync(int id, UpdateOptionDto dto)
+        {
+            var o = await _context.Options.FindAsync(id);
+            if (o == null) return null;
+            o.Content = dto.Content ?? o.Content;
+            o.Value = dto.Value ?? o.Value;
+            await _context.SaveChangesAsync();
+            return new OptionDto
+            {
+                Id = o.Id,
+                QuestionId = o.QuestionId,
+                Content = o.Content,
+                Value = o.Value
+            };
+        }
+        public async Task<bool> DeleteAsync(int id)
+        {
+            // Set null OptionId trong Answer trước khi xóa Option
+            var answers = _context.Answers.Where(a => a.OptionId == id);
+            await answers.ForEachAsync(a => a.OptionId = null);
+            await _context.SaveChangesAsync();
+
+            var o = await _context.Options.FindAsync(id);
+            if (o == null) return false;
+            _context.Options.Remove(o);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+    }
+}

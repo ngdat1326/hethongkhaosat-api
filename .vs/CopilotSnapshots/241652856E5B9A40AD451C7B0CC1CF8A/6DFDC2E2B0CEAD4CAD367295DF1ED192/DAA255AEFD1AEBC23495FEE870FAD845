@@ -1,0 +1,65 @@
+﻿using api.DTOs.Survey;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize(Roles = "Admin")]
+    public class ManageSurveyController : ControllerBase
+    {
+        private readonly ISurveyService _service;
+        public ManageSurveyController(ISurveyService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var surveys = await _service.GetAllAsync();
+            return Ok(surveys);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var survey = await _service.GetByIdAsync(id);
+            if (survey == null) return NotFound();
+            return Ok(survey);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(CreateSurveyDto dto)
+        {
+            var survey = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = survey.Id }, survey);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, UpdateSurveyDto dto)
+        {
+            var survey = await _service.UpdateAsync(id, dto);
+            if (survey == null) return NotFound();
+            return Ok(survey);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+
+        [HttpPut("set-status/{id}")]
+        public async Task<IActionResult> SetStatus(int id, [FromQuery] byte status)
+        {
+            var updated = await _service.SetStatusAsync(id, status);
+            if (!updated) return NotFound();
+            return Ok(new { message = "Status updated." });
+        }
+    }
+}

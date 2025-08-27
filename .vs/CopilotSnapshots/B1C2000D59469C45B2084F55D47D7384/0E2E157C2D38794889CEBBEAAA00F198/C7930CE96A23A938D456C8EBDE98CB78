@@ -1,0 +1,36 @@
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace api.Models
+{
+    public class Response
+    {
+        [Key]
+        public int Id { get; set; }
+        [ForeignKey("Survey")]
+        public int SurveyId { get; set; }
+        public Survey Survey { get; set; } = null!;
+        [MaxLength(100)]
+        public string? RespondentId { get; set; } // mã bệnh nhân, userId hoặc mã ẩn danh
+        public DateTime SubmittedAt { get; set; } = DateTime.Now;
+        public ICollection<Answer> Answers { get; set; } = new List<Answer>();
+    }
+
+    public class Answer
+    {
+        [Key]
+        public int Id { get; set; }
+        [ForeignKey("Response")]
+        public int ResponseId { get; set; }
+        public Response Response { get; set; } = null!;
+        [ForeignKey("Question")]
+        public int QuestionId { get; set; }
+        public Question Question { get; set; } = null!;
+        [ForeignKey("Option")]
+        public int? OptionId { get; set; } // dùng cho SingleChoice
+        public Option? Option { get; set; }
+        [MaxLength(1000)]
+        public string? TextAnswer { get; set; } // dùng cho Text, Scale
+        public string? ExtraOptionIds { get; set; } // dùng cho MultiChoice (JSON chuỗi các OptionId)
+    }
+}

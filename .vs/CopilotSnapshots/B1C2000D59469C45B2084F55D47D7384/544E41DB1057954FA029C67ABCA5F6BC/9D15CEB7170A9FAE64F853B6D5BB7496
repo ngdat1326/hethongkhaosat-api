@@ -1,0 +1,157 @@
+﻿using api.Data;
+using api.DTOs.Question;
+using api.Interfaces.IRepositories;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace api.Repositories
+{
+    public class QuestionRepository : IQuestionRepository
+    {
+        private readonly ApplicationDbContext _context;
+        public QuestionRepository(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+        public async Task<IEnumerable<QuestionDto>> GetAllAsync()
+        {
+            return await _context.Questions.Select(q => new QuestionDto
+            {
+                Id = q.Id,
+                SurveyId = q.SurveyId,
+                Content = q.Content,
+                QuestionTypeId = q.QuestionTypeId,
+                Order = q.Order,
+                IsRequired = q.IsRequired
+            }).ToListAsync();
+        }
+        public async Task<IEnumerable<QuestionDto>> GetAllBySurveyIdAsync(int surveyId)
+        {
+            return await _context.Questions
+                .Where(q => q.SurveyId == surveyId)
+                .Select(q => new QuestionDto
+                {
+                    Id = q.Id,
+                    SurveyId = q.SurveyId,
+                    Content = q.Content,
+                    QuestionTypeId = q.QuestionTypeId,
+                    Order = q.Order,
+                    IsRequired = q.IsRequired
+                }).ToListAsync();
+        }
+        public async Task<QuestionDto?> GetByIdAsync(int id)
+        {
+            var q = await _context.Questions.FindAsync(id);
+            if (q == null) return null;
+            return new QuestionDto
+            {
+                Id = q.Id,
+                SurveyId = q.SurveyId,
+                Content = q.Content,
+                QuestionTypeId = q.QuestionTypeId,
+                Order = q.Order,
+                IsRequired = q.IsRequired
+            };
+        }
+        public async Task<QuestionDto> CreateAsync(CreateQuestionDto dto)
+        {
+            var q = new Question
+            {
+                SurveyId = dto.SurveyId,
+                Content = dto.Content,
+                QuestionTypeId = dto.QuestionTypeId,
+                Order = dto.Order,
+                IsRequired = dto.IsRequired
+            };
+            _context.Questions.Add(q);
+            await _context.SaveChangesAsync();
+            return new QuestionDto
+            {
+                Id = q.Id,
+                SurveyId = q.SurveyId,
+                Content = q.Content,
+                QuestionTypeId = q.QuestionTypeId,
+                Order = q.Order,
+                IsRequired = q.IsRequired
+            };
+        }
+        public async Task<QuestionDto?> UpdateAsync(int id, UpdateQuestionDto dto)
+        {
+            var q = await _context.Questions.FindAsync(id);
+            if (q == null) return null;
+            q.Content = dto.Content ?? q.Content;
+            q.QuestionTypeId = dto.QuestionTypeId ?? q.QuestionTypeId;
+            q.Order = dto.Order ?? q.Order;
+            q.IsRequired = dto.IsRequired ?? q.IsRequired;
+            await _context.SaveChangesAsync();
+            return new QuestionDto
+            {
+                Id = q.Id,
+                SurveyId = q.SurveyId,
+                Content = q.Content,
+                QuestionTypeId = q.QuestionTypeId,
+                Order = q.Order,
+                IsRequired = q.IsRequired
+            };
+        }
+        // ?? quy l?y t?t c? các questionId con c?a m?t câu h?i g?c
+        public async Task<List<int>> GetAllDescendantQuestionIdsAsync(int rootId)
+        {
+            var result = new List<int>();
+            var directChildren = await _context.QuestionBranches
+                .Where(b => b.CurrentQuestionId == rootId)
+                .Select(b => b.NextQuestionId)
+                .ToListAsync();
+            foreach (var childId in directChildren)
+            {
+                result.Add(childId);
+                var subChildren = await GetAllDescendantQuestionIdsAsync(childId);
+                result.AddRange(subChildren);
+            }
+            return result;
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            // ?? quy xóa t?t c? các questionId con c?a m?t câu h?i g?c
+            var allDescendants = await GetAllDescendantQuestionIdsAsync(id);
+            foreach (var childId in allDescendants.Distinct())
+            {
+                await DeleteAsync(childId);
+            }
+            // Set null OptionId trong Answer tr??c khi xóa Option c?a Question này
+            var optionIds = await _context.Options.Where(o => o.QuestionId == id).Select(o => o.Id).ToListAsync();
+            if (optionIds.Any())
+            {
+                var answers = _context.Answers.Where(a => a.OptionId != null && optionIds.Contains(a.OptionId.Value));
+                await answers.ForEachAsync(a => a.OptionId = null);
+                await _context.SaveChangesAsync();
+            }
+            // Set null QuestionId trong Answer tr??c khi xóa Question
+            var answersWithQuestion = _context.Answers.Where(a => a.QuestionId == id);
+            await answersWithQuestion.ForEachAsync(a => a.QuestionId = null);
+            await _context.SaveChangesAsync();
+            // Xóa các branch liên quan
+            var branchesNext = _context.QuestionBranches.Where(b => b.NextQuestionId == id);
+            _context.QuestionBranches.RemoveRange(branchesNext);
+            var branchesCurrent = _context.QuestionBranches.Where(b => b.CurrentQuestionId == id);
+            _context.QuestionBranches.RemoveRange(branchesCurrent);
+            // Xóa các option liên quan
+            var options = _context.Options.Where(o => o.QuestionId == id);
+            _context.Options.RemoveRange(options);
+            // Xóa câu h?i
+            var q = await _context.Questions.FindAsync(id);
+            if (q == null) return false;
+            _context.Questions.Remove(q);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<List<Question>> GetQuestionsByIdsAsync(List<int> ids)
+        {
+            return await _context.Questions.Where(q => ids.Contains(q.Id)).ToListAsync();
+        }
+    }
+}

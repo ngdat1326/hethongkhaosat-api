@@ -1,0 +1,37 @@
+﻿using api.DTOs.Survey;
+using api.Models;
+using api.Interfaces.IRepositories;
+using System.Threading.Tasks;
+
+namespace api.Services
+{
+    public class ResponseService : IResponseService
+    {
+        private readonly IResponseRepository _responseRepo;
+        private readonly IAnswerRepository _answerRepo;
+        public ResponseService(IResponseRepository responseRepo, IAnswerRepository answerRepo)
+        {
+            _responseRepo = responseRepo;
+            _answerRepo = answerRepo;
+        }
+        public async Task SaveSurveyResultAsync(SubmitSurveyResultDto dto)
+        {
+            var response = new Response
+            {
+                SurveyId = dto.SurveyId,
+                RespondentId = dto.RespondentId,
+                SubmittedAt = DateTime.Now
+            };
+            response = await _responseRepo.AddResponseAsync(response);
+            var answers = dto.Answers.Select(ans => new Answer
+            {
+                ResponseId = response.Id,
+                QuestionId = ans.QuestionId,
+                OptionId = ans.OptionId,
+                TextAnswer = ans.TextAnswer,
+                ExtraOptionIds = ans.ExtraOptionIds
+            }).ToList();
+            await _answerRepo.AddAnswersAsync(answers);
+        }
+    }
+}

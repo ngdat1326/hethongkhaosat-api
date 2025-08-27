@@ -1,0 +1,22 @@
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace api.Models
+{
+    public class Question
+    {
+        [Key]
+        public int Id { get; set; }
+        [ForeignKey("Survey")]
+        public int SurveyId { get; set; }
+        public Survey Survey { get; set; } = null!;
+        [MaxLength(1000)]
+        public string Content { get; set; } = null!;
+        [ForeignKey("QuestionType")]
+        public int QuestionTypeId { get; set; }
+        public QuestionType QuestionType { get; set; } = null!;
+        public int Order { get; set; }
+        public bool IsRequired { get; set; } = false;
+        public ICollection<Option>? Options { get; set; }
+    }
+}

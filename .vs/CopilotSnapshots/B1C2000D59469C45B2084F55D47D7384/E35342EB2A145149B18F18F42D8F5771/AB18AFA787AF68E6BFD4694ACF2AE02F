@@ -1,0 +1,27 @@
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace api.Models
+{
+    public class Answer
+    {
+        [Key]
+        public int Id { get; set; }
+        [ForeignKey("Response")]
+        public int ResponseId { get; set; }
+        public Response Response { get; set; } = null!;
+        [ForeignKey("Question")]
+        public int? QuestionId { get; set; } // Cho phép nullable ?? gi? Answer khi xóa Question
+        public Question? Question { get; set; } = null!;
+        [ForeignKey("Option")]
+        public int? OptionId { get; set; } // dùng cho SingleChoice
+        public Option? Option { get; set; }
+        [MaxLength(1000)]
+        public string? TextAnswer { get; set; } // dùng cho Text, Scale
+        public string? ExtraOptionIds { get; set; } // dùng cho MultiChoice (JSON chu?i các OptionId)
+        [MaxLength(1000)]
+        public string? QuestionContent { get; set; } // n?i dung câu h?i t?i th?i ?i?m tr? l?i
+        [MaxLength(1000)]
+        public string? AnswerContent { get; set; } // n?i dung ?áp án t?i th?i ?i?m tr? l?i
+    }
+}

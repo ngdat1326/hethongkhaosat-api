@@ -1,0 +1,117 @@
+﻿using api.DTOs.Survey;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Mvc;
+using api.DTOs.QuestionType;
+using api.DTOs.Option;
+using api.DTOs.QuestionBranch;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class PublicSurveyController : ControllerBase
+    {
+        private readonly ISurveyService _surveyService;
+        private readonly IQuestionService _questionService;
+        private readonly IQuestionTypeService _questionTypeService;
+        private readonly IOptionService _optionService;
+        private readonly IQuestionBranchService _questionBranchService;
+        public PublicSurveyController(
+            ISurveyService surveyService,
+            IQuestionService questionService,
+            IQuestionTypeService questionTypeService,
+            IOptionService optionService,
+            IQuestionBranchService questionBranchService)
+        {
+            _surveyService = surveyService;
+            _questionService = questionService;
+            _questionTypeService = questionTypeService;
+            _optionService = optionService;
+            _questionBranchService = questionBranchService;
+        }
+
+        [HttpGet("detail/{surveyId}")]
+        public async Task<IActionResult> GetSurveyDetail(int surveyId)
+        {
+            try
+            {
+                var survey = await _surveyService.GetByIdAsync(surveyId);
+                if (survey == null)
+                    return NotFound(new { error = "Survey not found" });
+                var questions = await _questionService.GetAllBySurveyIdAsync(surveyId);
+                var allTypes = await _questionTypeService.GetAllAsync();
+                var allOptions = await _optionService.GetAllAsync();
+                var allBranches = await _questionBranchService.GetAllAsync();
+                // Xác định tất cả các NextQuestionId trong các branch
+                var nextQuestionIds = allBranches.Select(b => b.NextQuestionId).ToHashSet();
+                // Xác định các root question id (theo order)
+                var rootQuestionIds = questions.Where(q => !nextQuestionIds.Contains(q.Id)).OrderBy(q => q.Order).Select(q => q.Id).ToList();
+                // Tạo map cho parent question/option
+                var parentMap = new Dictionary<int, (int? parentQuestionId, int? parentOptionId)>();
+                foreach (var branch in allBranches)
+                {
+                    foreach (var optionId in branch.OptionIds)
+                    {
+                        parentMap[branch.NextQuestionId] = (branch.CurrentQuestionId, optionId);
+                    }
+                }
+                var questionDetails = new List<QuestionDetailDto>();
+                foreach (var q in questions)
+                {
+                    var type = allTypes.FirstOrDefault(t => t.Id == q.QuestionTypeId);
+                    if (type == null)
+                    {
+                        Console.WriteLine($"QuestionType not found for QuestionId: {q.Id}, QuestionTypeId: {q.QuestionTypeId}");
+                        return StatusCode(500, new { error = $"QuestionType not found for QuestionId: {q.Id}, QuestionTypeId: {q.QuestionTypeId}" });
+                    }
+                    var options = allOptions.Where(o => o.QuestionId == q.Id).ToList();
+                    var optionBranches = new List<OptionBranchDto>();
+                    foreach (var opt in options)
+                    {
+                        var branchesForOption = allBranches.Where(b => b.CurrentQuestionId == q.Id && b.OptionIds.Contains(opt.Id)).ToList();
+                        optionBranches.Add(new OptionBranchDto
+                        {
+                            Id = opt.Id,
+                            QuestionId = opt.QuestionId,
+                            Content = opt.Content,
+                            Value = opt.Value,
+                            NextQuestionId = branchesForOption.FirstOrDefault()?.NextQuestionId
+                        });
+                    }
+                    var branches = allBranches.Where(b => b.CurrentQuestionId == q.Id).ToList();
+                    // Câu hỏi là root nếu không nằm trong nextQuestionIds
+                    bool isRoot = !nextQuestionIds.Contains(q.Id);
+                    parentMap.TryGetValue(q.Id, out var parentInfo);
+                    questionDetails.Add(new QuestionDetailDto
+                    {
+                        Id = q.Id,
+                        Content = q.Content,
+                        Order = q.Order,
+                        IsRequired = q.IsRequired,
+                        QuestionType = type,
+                        Options = optionBranches,
+                        Branches = branches.ToList(),
+                        IsRoot = isRoot,
+                        ParentQuestionId = parentInfo.parentQuestionId,
+                        ParentOptionId = parentInfo.parentOptionId
+                    });
+                }
+                var result = new SurveyDetailDto
+                {
+                    Survey = survey,
+                    Questions = questionDetails,
+                    RootQuestionIds = rootQuestionIds
+                };
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] {ex}");
+                return StatusCode(500, new { error = "Internal server error", detail = ex.Message });
+            }
+        }
+
+        [HttpGet("ping")]
+        public IActionResult Ping() => Ok("pong");
+    }
+}

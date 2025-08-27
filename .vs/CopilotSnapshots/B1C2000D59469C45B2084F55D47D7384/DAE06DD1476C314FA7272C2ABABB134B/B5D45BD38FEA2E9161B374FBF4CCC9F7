@@ -1,0 +1,66 @@
+﻿using api.Data;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Linq;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize(Roles = "Admin,User")]
+    public class DashboardController : ControllerBase
+    {
+        private readonly ApplicationDbContext _context;
+        public DashboardController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet("data")]
+        public IActionResult GetDashboardData()
+        {
+            if (User.IsInRole("Admin"))
+            {
+                return Ok(new
+                {
+                    role = "Admin",
+                    message = "Welcome Admin! You have full access."
+                });
+            }
+
+            if (User.IsInRole("User"))
+            {
+                return Ok(new
+                {
+                    role = "User",
+                    message = "Welcome User! You have limited access."
+                });
+            }
+
+            return Forbid();
+        }
+
+        [HttpGet("summary")]
+        public IActionResult GetDashboardSummary()
+        {
+            // Chỉ lấy khảo sát đang hoạt động (Status == 1)
+            var activeSurveyIds = _context.Surveys
+                .Where(s => s.Status == 1)
+                .Select(s => s.Id)
+                .ToList();
+
+            var totalSurveys = activeSurveyIds.Count;
+            var totalResponses = _context.Responses.Count(r => activeSurveyIds.Contains(r.SurveyId));
+            var today = DateTime.Today;
+            var responsesToday = _context.Responses.Count(r => activeSurveyIds.Contains(r.SurveyId) && r.SubmittedAt.Date == today);
+
+            return Ok(new
+            {
+                totalSurveys,
+                totalResponses,
+                responsesToday
+            });
+        }
+    }
+}

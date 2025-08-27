@@ -1,0 +1,14 @@
+﻿namespace api.DTOs.User
+{
+    public class UserDto
+    {
+        public string Id { get; set; } = null!;
+        public string Username { get; set; } = null!;
+        public string Email { get; set; } = null!;
+        public string FullName { get; set; } = null!;
+        public string? Role { get; set; }
+        public int? DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
+        public bool IsActive { get; set; }
+    }
+}

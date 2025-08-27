@@ -1,0 +1,83 @@
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+using api.Models;
+using Microsoft.AspNetCore.Identity;
+
+namespace api.Data
+{
+    public class ApplicationDbContext : IdentityDbContext<AppUser>
+    {
+        public ApplicationDbContext(DbContextOptions options) : base(options) {}
+
+        public DbSet<Department> Departments { get; set; } = null!;
+        public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+        public DbSet<Survey> Surveys { get; set; } = null!;
+        public DbSet<QuestionType> QuestionTypes { get; set; } = null!;
+        public DbSet<Question> Questions { get; set; } = null!;
+        public DbSet<Option> Options { get; set; } = null!;
+        public DbSet<QuestionBranch> QuestionBranches { get; set; } = null!;
+        public DbSet<QuestionBranchOption> QuestionBranchOptions { get; set; } = null!;
+        public DbSet<Response> Responses { get; set; } = null!;
+        public DbSet<Answer> Answers { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+//            builder.Entity<IdentityRole>().HasData(
+//                new IdentityRole { Name = "Admin", NormalizedName = "ADMIN" },
+//                new IdentityRole { Name = "User", NormalizedName = "USER" }
+//            );
+
+            // Cascade delete: Khi xóa Survey s? xóa luôn các Question liên quan
+            builder.Entity<Question>()
+                .HasOne(q => q.Survey)
+                .WithMany(s => s.Questions)
+                .HasForeignKey(q => q.SurveyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<QuestionBranch>()
+                .HasOne(qb => qb.CurrentQuestion)
+                .WithMany()
+                .HasForeignKey(qb => qb.CurrentQuestionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<QuestionBranch>()
+                .HasOne(qb => qb.NextQuestion)
+                .WithMany()
+                .HasForeignKey(qb => qb.NextQuestionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<QuestionBranch>()
+                .HasMany(qb => qb.BranchOptions)
+                .WithOne(qbo => qbo.QuestionBranch)
+                .HasForeignKey(qbo => qbo.QuestionBranchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<QuestionBranchOption>()
+                .HasOne(qbo => qbo.Option)
+                .WithMany()
+                .HasForeignKey(qbo => qbo.OptionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Trả lại cấu hình cũ: Answer - Question cascade delete
+            builder.Entity<Answer>()
+                .HasOne(a => a.Question)
+                .WithMany()
+                .HasForeignKey(a => a.QuestionId)
+                .OnDelete(DeleteBehavior.Cascade); // Khi xóa Question, Answer cũng bị xóa theo
+
+            builder.Entity<Answer>()
+                .HasOne(a => a.Option)
+                .WithMany()
+                .HasForeignKey(a => a.OptionId)
+                .OnDelete(DeleteBehavior.Cascade); // Khi xóa Option, Answer cũng bị xóa theo
+
+            builder.Entity<Response>()
+                .HasMany(r => r.Answers)
+                .WithOne(a => a.Response)
+                .HasForeignKey(a => a.ResponseId)
+                .OnDelete(DeleteBehavior.Restrict); // S?a l?i ?? tránh multiple cascade paths
+        }
+    }
+}

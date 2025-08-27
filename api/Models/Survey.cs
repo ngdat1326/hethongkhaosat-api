@@ -1,0 +1,26 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace api.Models
+{
+    public class Survey
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required]
+        [MaxLength(200)]
+        public string Title { get; set; } = null!;
+        [MaxLength(1000)]
+        public string? Description { get; set; }
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        [ForeignKey("AppUser")]
+        public string CreatedBy { get; set; } = null!;
+        public AppUser? AppUser { get; set; }
+        [ForeignKey("Department")]
+        public int DepartmentId { get; set; }
+        public Department? Department { get; set; }
+        public byte Status { get; set; } = 0; // 0: Draft, 1: Active, 2: Paused, 3: Closed, 4: Archived
+        public ICollection<Question> Questions { get; set; } = new List<Question>();
+    }
+}

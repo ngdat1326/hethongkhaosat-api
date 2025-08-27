@@ -1,0 +1,17 @@
+﻿{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=LAPTOP-BMO8BISN\\SQLEXPRESS;Database=database_moi1;Trusted_Connection=True;TrustServerCertificate=True;"
+  },
+  "JWT": {
+    "Key": "qwertyuiop123456789asdfghjkl98654321zxcvbnmQWERTYUIOP0987654321ASDFGHJKL",
+    "Issuer": "https://localhost:7226",
+    "Audience": "https://localhost:7226"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}

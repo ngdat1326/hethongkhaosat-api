@@ -1,0 +1,25 @@
+using api.DTOs.Question;
+using api.Interfaces.IRepositories;
+using api.Interfaces.IServices;
+
+namespace api.Services
+{
+    public class QuestionService : IQuestionService
+    {
+        private readonly IQuestionRepository _repo;
+        public QuestionService(IQuestionRepository repo)
+        {
+            _repo = repo;
+        }
+        public Task<IEnumerable<QuestionDto>> GetAllAsync() => _repo.GetAllAsync();
+        public Task<IEnumerable<QuestionDto>> GetAllBySurveyIdAsync(int surveyId) => _repo.GetAllBySurveyIdAsync(surveyId);
+        public Task<QuestionDto?> GetByIdAsync(int id) => _repo.GetByIdAsync(id);
+        public Task<QuestionDto> CreateAsync(CreateQuestionDto dto) => _repo.CreateAsync(dto);
+        public Task<QuestionDto?> UpdateAsync(int id, UpdateQuestionDto dto) => _repo.UpdateAsync(id, dto);
+        public Task<bool> DeleteAsync(int id) => _repo.DeleteAsync(id);
+        public Task UpdateOrderAsync(List<UpdateQuestionOrderDto> dtos)
+        {
+            return _repo.UpdateOrderAsync(dtos);
+        }
+    }
+}

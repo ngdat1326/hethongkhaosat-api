@@ -1,0 +1,51 @@
+﻿using api.Data;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Linq;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize(Roles = "Admin,User")]
+    public class DashboardController : ControllerBase
+    {
+        private readonly ApplicationDbContext _context;
+        public DashboardController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet("summary")]
+        public IActionResult GetDashboardSummary()
+        {
+            var activeSurveys = _context.Surveys
+                .Where(s => s.Status == 1)
+                .ToList();
+
+            var activeSurveyIds = activeSurveys.Select(s => s.Id).ToList();
+
+            var totalSurveys = activeSurveyIds.Count;
+            var totalResponses = _context.Responses.Count(r => activeSurveyIds.Contains(r.SurveyId));
+            var today = DateTime.Today;
+            var responsesToday = _context.Responses.Count(r => activeSurveyIds.Contains(r.SurveyId) && r.SubmittedAt.Date == today);
+
+            var surveySummaries = activeSurveys.Select(s => new
+            {
+                surveyId = s.Id,
+                title = s.Title,
+                questionCount = _context.Questions.Count(q => q.SurveyId == s.Id),
+                responseCount = _context.Responses.Count(r => r.SurveyId == s.Id)
+            }).ToList();
+
+            return Ok(new
+            {
+                totalSurveys,
+                totalResponses,
+                responsesToday,
+                surveys = surveySummaries
+            });
+        }
+    }
+}

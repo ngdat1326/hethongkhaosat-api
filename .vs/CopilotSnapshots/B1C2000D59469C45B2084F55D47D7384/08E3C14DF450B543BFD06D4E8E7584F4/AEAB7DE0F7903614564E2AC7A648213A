@@ -1,0 +1,11 @@
+﻿using api.DTOs.Survey;
+using api.Models;
+using System.Threading.Tasks;
+
+namespace api.Interfaces.IServices
+{
+    public interface IResponseService
+    {
+        Task SaveSurveyResultAsync(SubmitSurveyResultDto dto);
+    }
+}

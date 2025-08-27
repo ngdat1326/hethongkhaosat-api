@@ -1,0 +1,19 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace api.Models
+{
+    public class QuestionBranch
+    {
+        [Key]
+        public int Id { get; set; }
+        [ForeignKey("CurrentQuestion")]
+        public int CurrentQuestionId { get; set; }
+        public Question CurrentQuestion { get; set; } = null!;
+        [ForeignKey("NextQuestion")]
+        public int NextQuestionId { get; set; }
+        public Question NextQuestion { get; set; } = null!;
+        public string ConditionType { get; set; } = "AND"; // "AND" ho?c "OR"
+        public ICollection<QuestionBranchOption> BranchOptions { get; set; } = new List<QuestionBranchOption>();
+    }
+}

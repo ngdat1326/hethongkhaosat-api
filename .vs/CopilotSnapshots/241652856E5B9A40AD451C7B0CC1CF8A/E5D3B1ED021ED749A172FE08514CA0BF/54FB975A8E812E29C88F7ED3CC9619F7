@@ -1,0 +1,16 @@
+﻿namespace api.DTOs.User
+{
+    public class BulkUserActionRequest
+    {
+        public List<string>? UserIds { get; set; }
+        public string? Search { get; set; }
+        public string? Role { get; set; }
+        public int? DepartmentId { get; set; }
+        public bool? IsActive { get; set; }
+    }
+
+    public class BulkSetActiveRequest : BulkUserActionRequest
+    {
+        public bool SetActive { get; set; }
+    }
+}

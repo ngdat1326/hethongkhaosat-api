@@ -1,0 +1,61 @@
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+using api.Models;
+using Microsoft.AspNetCore.Identity;
+
+namespace api.Data
+{
+    public class ApplicationDbContext : IdentityDbContext<AppUser>
+    {
+        public ApplicationDbContext(DbContextOptions options) : base(options) {}
+
+        public DbSet<Department> Departments { get; set; } = null!;
+        public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+        public DbSet<Survey> Surveys { get; set; } = null!;
+        public DbSet<QuestionType> QuestionTypes { get; set; } = null!;
+        public DbSet<Question> Questions { get; set; } = null!;
+        public DbSet<Option> Options { get; set; } = null!;
+        public DbSet<QuestionBranch> QuestionBranches { get; set; } = null!;
+        public DbSet<QuestionBranchOption> QuestionBranchOptions { get; set; } = null!;
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+
+            builder.Entity<IdentityRole>().HasData(
+                new IdentityRole { Name = "Admin", NormalizedName = "ADMIN" },
+                new IdentityRole { Name = "User", NormalizedName = "USER" }
+            );
+
+            builder.Entity<QuestionBranch>()
+                .HasOne(qb => qb.CurrentQuestion)
+                .WithMany()
+                .HasForeignKey(qb => qb.CurrentQuestionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<QuestionBranch>()
+                .HasOne(qb => qb.NextQuestion)
+                .WithMany()
+                .HasForeignKey(qb => qb.NextQuestionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<QuestionBranch>()
+                .HasOne(qb => qb.Option)
+                .WithMany()
+                .HasForeignKey(qb => qb.OptionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<QuestionBranchOption>()
+                .HasOne(qbo => qbo.QuestionBranch)
+                .WithMany(qb => qb.BranchOptions)
+                .HasForeignKey(qbo => qbo.QuestionBranchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<QuestionBranchOption>()
+                .HasOne(qbo => qbo.Option)
+                .WithMany()
+                .HasForeignKey(qbo => qbo.OptionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        }
+    }
+}

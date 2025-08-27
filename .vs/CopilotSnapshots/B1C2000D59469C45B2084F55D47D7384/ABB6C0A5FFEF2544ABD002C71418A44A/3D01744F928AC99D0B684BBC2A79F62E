@@ -1,0 +1,31 @@
+﻿using System.Collections.Generic;
+
+namespace api.DTOs.Survey
+{
+    public class SurveyResponseDto
+    {
+        public int ResponseId { get; set; }
+        public int SurveyId { get; set; }
+        public string? RespondentId { get; set; }
+        public DateTime SubmittedAt { get; set; }
+        public List<SurveyAnswerResultDto> Answers { get; set; } = new();
+    }
+
+    public class SurveyAnswerResultDto
+    {
+        public int QuestionId { get; set; }
+        public string QuestionContent { get; set; } = null!;
+        public string QuestionTypeCode { get; set; } = null!;
+        public string QuestionTypeName { get; set; } = null!;
+        public int? OptionId { get; set; }
+        public string? OptionContent { get; set; }
+        public string? TextAnswer { get; set; }
+        public List<OptionResultDto>? ExtraOptions { get; set; }
+    }
+
+    public class OptionResultDto
+    {
+        public int OptionId { get; set; }
+        public string Content { get; set; } = null!;
+    }
+}

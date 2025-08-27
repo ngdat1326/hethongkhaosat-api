@@ -1,0 +1,125 @@
+﻿using api.Data;
+using System;
+using System.Data;
+using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using ClosedXML.Excel;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using api.Models;
+
+namespace api.Report
+{
+    public class SurveyExcelExporter
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly string _connectionString;
+
+        public SurveyExcelExporter(ApplicationDbContext context)
+        {
+            _context = context;
+            _connectionString = _context.Database.GetDbConnection().ConnectionString;
+        }
+
+        public MemoryStream ExportSurveyResponsesToExcel(int surveyId)
+        {
+            // 1. Lấy dữ liệu từ SQL (có thể là pivot hoặc query thẳng)
+            var dt = GetSurveyResponsesDataTable(surveyId);
+
+            // 2. Tạo Excel
+            var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("SurveyResponses");
+
+            // 3. Đổ DataTable vào Excel
+            worksheet.Cell(1, 1).InsertTable(dt, "Responses", true);
+
+            // 4. Format cơ bản
+            worksheet.Columns().AdjustToContents();
+            worksheet.RangeUsed().Style.Font.FontName = "Arial";
+            worksheet.Row(1).Style.Font.Bold = true;
+            worksheet.Row(1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Wrap text & chỉnh width cho cột "Ngày gửi"
+            worksheet.Columns().Style.Alignment.WrapText = true;
+            int dateColIndex = dt.Columns["Ngày gửi"] != null ? dt.Columns["Ngày gửi"].Ordinal + 1 : 2;
+            worksheet.Column(dateColIndex).Width = 22;
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+            return stream;
+        }
+
+        public MemoryStream ExportSurveyResponsesToExcelCustom(int surveyId, DateTime? fromDate = null, DateTime? toDate = null)
+        {
+            // Lấy thông tin khảo sát (EF Core)
+            var survey = _context.Surveys.Include(s => s.Department).FirstOrDefault(s => s.Id == surveyId);
+            string surveyTitle = survey?.Title ?? $"Survey_{surveyId}";
+            string departmentText = survey?.Department?.Name ?? "";
+            string timeText = survey != null ? $"Thời gian: {survey.StartDate:dd/MM/yyyy} - {survey.EndDate:dd/MM/yyyy}" : "";
+
+            // Lấy dữ liệu từ SQL
+            var dt = GetSurveyResponsesDataTable(surveyId);
+
+            // Render Excel
+            var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("SurveyResponses");
+            int colCount = dt.Columns.Count;
+            worksheet.Cell(1, 1).Value = surveyTitle;
+            worksheet.Range(1, 1, 1, colCount).Merge().Style.Font.Bold = true;
+            worksheet.Range(1, 1, 1, colCount).Style.Font.FontName = "Arial";
+            worksheet.Range(1, 1, 1, colCount).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            worksheet.Cell(2, 1).Value = timeText;
+            worksheet.Range(2, 1, 2, colCount).Merge();
+            worksheet.Range(2, 1, 2, colCount).Style.Font.FontName = "Arial";
+            worksheet.Range(2, 1, 2, colCount).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            worksheet.Cell(3, 1).Value = string.IsNullOrWhiteSpace(departmentText) ? "" : $"Phạm vi khảo sát: {departmentText}";
+            worksheet.Range(3, 1, 3, colCount).Merge();
+            worksheet.Range(3, 1, 3, colCount).Style.Font.FontName = "Arial";
+            worksheet.Range(3, 1, 3, colCount).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            worksheet.Cell(4, 1).InsertTable(dt, "Responses", true);
+            worksheet.Columns().AdjustToContents();
+            worksheet.RangeUsed().Style.Font.FontName = "Arial";
+            worksheet.Row(1).Style.Font.Bold = true;
+            worksheet.Row(1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            worksheet.Columns().Style.Alignment.WrapText = true;
+            int dateColIndex = dt.Columns["Ngày gửi"] != null ? dt.Columns["Ngày gửi"].Ordinal + 1 : 5;
+            worksheet.Column(dateColIndex).Width = 22;
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+            return stream;
+        }
+
+        private DataTable GetSurveyResponsesDataTable(int surveyId)
+        {
+            // Query SQL thuần, có thể thay bằng stored procedure nếu muốn pivot
+            string sql = @"
+                SELECT 
+                    r.FullName AS [Họ tên],
+                    r.Position AS [Chức vụ],
+                    r.PhoneNumber AS [Số điện thoại],
+                    r.CompanyName AS [Đơn vị/Công ty],
+                    r.SubmittedAt AS [Ngày gửi],
+                    q.Content AS [Câu hỏi],
+                    COALESCE(a.AnswerContent, a.TextAnswer, o.Content) AS [Trả lời]
+                FROM Responses r
+                INNER JOIN Answers a ON a.ResponseId = r.Id
+                LEFT JOIN Questions q ON q.Id = ISNULL(a.QuestionId, a.QuestionIdBackup)
+                LEFT JOIN Options o ON o.Id = a.OptionIdBackup
+                WHERE r.SurveyId = @SurveyId
+                ORDER BY r.SubmittedAt, q.Id";
+
+            var dt = new DataTable();
+            using (var conn = new SqlConnection(_connectionString))
+            using (var cmd = new SqlCommand(sql, conn))
+            using (var da = new SqlDataAdapter(cmd))
+            {
+                cmd.Parameters.AddWithValue("@SurveyId", surveyId);
+                da.Fill(dt);
+            }
+            return dt;
+        }
+    }
+}

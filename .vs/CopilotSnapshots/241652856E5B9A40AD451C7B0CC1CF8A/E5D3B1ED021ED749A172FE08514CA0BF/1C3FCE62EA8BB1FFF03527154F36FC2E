@@ -1,0 +1,229 @@
+﻿using api.Data;
+using api.DTOs.User;
+using api.Interfaces.IRepositories;
+using api.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Repositories
+{
+    public class UserRepository : IUserRepository
+    {
+        private readonly UserManager<AppUser> _userManager;
+        private readonly ApplicationDbContext _context;
+
+        public UserRepository(UserManager<AppUser> userManager, ApplicationDbContext context)
+        {
+            _userManager = userManager;
+            _context = context;
+        }
+
+        public async Task<UserDto> CreateUserAsync(CreateUserDto dto)
+        {
+            var user = new AppUser
+            {
+                UserName = dto.Username,
+                Email = dto.Email,
+                FullName = dto.FullName,
+                DepartmentId = dto.DepartmentId ?? 1, // Giả sử DepartmentId mặc định là 1 nếu không có giá trị
+                IsActive = true,
+                PhoneNumber = dto.PhoneNumber
+            };
+
+            // Mật khẩu mặc định
+            var defaultPassword = "Matkhau@123456789";
+
+            var result = await _userManager.CreateAsync(user, defaultPassword);
+            if (!result.Succeeded)
+            {
+                throw new Exception("Không thể tạo user: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
+
+            // Gán role cố định là "User"
+            await _userManager.AddToRoleAsync(user, "User");
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.UserName!,
+                Email = user.Email!,
+                FullName = user.FullName,
+                Role = "User",
+                DepartmentId = user.DepartmentId,
+                IsActive = user.IsActive,
+                PhoneNumber = user.PhoneNumber
+            };
+        }
+
+        public async Task<bool> DeleteUserAsync(string id)
+        {
+            var user = await _userManager.FindByIdAsync(id);
+            if (user == null) return false;
+
+            var result = await _userManager.DeleteAsync(user);
+            return result.Succeeded;
+        }
+
+        public async Task<PagedResult<UserDto>> GetAllUserAsync(int page, int pageSize, string? search = null, string? role = null, int? departmentId = null, bool? isActive = null)
+        {
+            var query = _context.Users.Include(u => u.Department).AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query = query.Where(u => u.UserName.Contains(search) || u.FullName.Contains(search) || u.Email.Contains(search));
+            }
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                var userIdsWithRole = (await _userManager.GetUsersInRoleAsync(role)).Select(u => u.Id).ToList();
+                query = query.Where(u => userIdsWithRole.Contains(u.Id));
+            }
+            if (departmentId.HasValue)
+            {
+                query = query.Where(u => u.DepartmentId == departmentId);
+            }
+            if (isActive.HasValue)
+            {
+                query = query.Where(u => u.IsActive == isActive);
+            }
+
+            var totalCount = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+            var users = await query
+                .OrderBy(u => u.UserName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var result = new List<UserDto>();
+            foreach (var user in users)
+            {
+                var roles = await _userManager.GetRolesAsync(user);
+                result.Add(new UserDto
+                {
+                    Id = user.Id,
+                    Username = user.UserName!,
+                    Email = user.Email!,
+                    FullName = user.FullName,
+                    Role = roles.FirstOrDefault(),
+                    DepartmentId = user.DepartmentId,
+                    DepartmentName = user.Department?.Name,
+                    IsActive = user.IsActive,
+                    PhoneNumber = user.PhoneNumber
+                });
+            }
+
+            return new PagedResult<UserDto>
+            {
+                Items = result,
+                TotalCount = totalCount,
+                TotalPages = totalPages
+            };
+        }
+
+        public async Task<UserDto> UpdateUserAsync(string id, UpdateUserDto dto)
+        {
+            var user = await _userManager.Users
+                .Include(u => u.Department)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            if (user == null) throw new Exception("User không tồn tại");
+
+            // Giữ nguyên nếu không có dữ liệu mới
+            user.Email = !string.IsNullOrWhiteSpace(dto.Email) ? dto.Email : user.Email;
+            user.FullName = !string.IsNullOrWhiteSpace(dto.FullName) ? dto.FullName : user.FullName;
+            user.DepartmentId = dto.DepartmentId ?? user.DepartmentId;
+            user.PhoneNumber = !string.IsNullOrWhiteSpace(dto.PhoneNumber) ? dto.PhoneNumber : user.PhoneNumber;
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded) throw new Exception("Không thể cập nhật user");
+
+            var roles = await _userManager.GetRolesAsync(user);
+
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.UserName!,
+                Email = user.Email!,
+                FullName = user.FullName,
+                Role = roles.FirstOrDefault(),
+                DepartmentId = user.DepartmentId,
+                DepartmentName = user.Department?.Name,
+                IsActive = user.IsActive,
+                PhoneNumber = user.PhoneNumber
+            };
+        }
+
+        // New method for activating/deactivating a user
+        public async Task<UserDto> SetUserActiveStatusAsync(string id, bool isActive)
+        {
+            var user = await _userManager.Users
+                .Include(u => u.Department)
+                .FirstOrDefaultAsync(u => u.Id == id);
+            if (user == null) throw new Exception("User không tồn tại");
+            user.IsActive = isActive;
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded) throw new Exception("Không thể cập nhật trạng thái user");
+            var roles = await _userManager.GetRolesAsync(user);
+            return new UserDto
+            {
+                Id = user.Id,
+                Username = user.UserName!,
+                Email = user.Email!,
+                FullName = user.FullName,
+                Role = roles.FirstOrDefault(),
+                DepartmentId = user.DepartmentId,
+                DepartmentName = user.Department?.Name,
+                IsActive = user.IsActive
+            };
+        }
+
+        public async Task<int> BulkDeleteUsersAsync(BulkUserActionRequest request)
+        {
+            var users = await GetUsersByRequest(request);
+            int count = 0;
+            foreach (var user in users)
+            {
+                var result = await _userManager.DeleteAsync(user);
+                if (result.Succeeded) count++;
+            }
+            return count;
+        }
+
+            public async Task<int> BulkSetActiveStatusAsync(BulkSetActiveRequest request)
+            {
+                var users = await GetUsersByRequest(request);
+                int count = 0;
+                foreach (var user in users)
+                {
+                    user.IsActive = request.SetActive;
+                    var result = await _userManager.UpdateAsync(user);
+                    if (result.Succeeded) count++;
+                }
+                return count;
+            }
+
+            private async Task<List<AppUser>> GetUsersByRequest(BulkUserActionRequest request)
+            {
+                var query = _context.Users.AsQueryable();
+                if (request.UserIds != null && request.UserIds.Any())
+                {
+                    query = query.Where(u => request.UserIds.Contains(u.Id));
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(request.Search))
+                        query = query.Where(u => u.UserName.Contains(request.Search) || u.FullName.Contains(request.Search) || u.Email.Contains(request.Search));
+                    if (!string.IsNullOrWhiteSpace(request.Role))
+                    {
+                        var userIdsWithRole = (await _userManager.GetUsersInRoleAsync(request.Role)).Select(u => u.Id).ToList();
+                        query = query.Where(u => userIdsWithRole.Contains(u.Id));
+                    }
+                    if (request.DepartmentId.HasValue)
+                        query = query.Where(u => u.DepartmentId == request.DepartmentId);
+                    if (request.IsActive.HasValue)
+                        query = query.Where(u => u.IsActive == request.IsActive);
+                }
+                return await query.ToListAsync();
+            }
+    }
+}

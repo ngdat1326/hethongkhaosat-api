@@ -1,0 +1,71 @@
+﻿using api.DTOs.Survey;
+using api.Models;
+using api.Data;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using api.Interfaces.IServices;
+
+namespace api.Services
+{
+    public class SurveyResultService : ISurveyResultService
+    {
+        private readonly ApplicationDbContext _context;
+        public SurveyResultService(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+        public async Task<List<SurveyResponseDto>> GetResponsesBySurveyIdAsync(int surveyId)
+        {
+            var responses = await _context.Responses
+                .Where(r => r.SurveyId == surveyId)
+                .Include(r => r.Answers)
+                .ToListAsync();
+            var questions = await _context.Questions
+                .Where(q => q.SurveyId == surveyId)
+                .Include(q => q.QuestionType)
+                .ToDictionaryAsync(q => q.Id, q => q);
+            var options = await _context.Options
+                .Where(o => o.Question.SurveyId == surveyId)
+                .ToDictionaryAsync(o => o.Id, o => o.Content);
+            var result = new List<SurveyResponseDto>();
+            foreach (var resp in responses)
+            {
+                var respDto = new SurveyResponseDto
+                {
+                    ResponseId = resp.Id,
+                    RespondentId = resp.RespondentId,
+                    SubmittedAt = resp.SubmittedAt,
+                    Answers = new List<SurveyAnswerDto>()
+                };
+                foreach (var ans in resp.Answers)
+                {
+                    string answerContent = "";
+                    if (options.TryGetValue(ans.OptionId, out var optContent))
+                        answerContent = optContent;
+                    else if (!string.IsNullOrEmpty(ans.TextAnswer))
+                        answerContent = ans.TextAnswer;
+                    else if (!string.IsNullOrEmpty(ans.ExtraOptionIds))
+                    {
+                        try
+                        {
+                            var ids = JsonSerializer.Deserialize<List<int>>(ans.ExtraOptionIds);
+                            if (ids != null)
+                                answerContent = string.Join(", ", ids.Where(options.ContainsKey).Select(id => options[id]));
+                        }
+                        catch { answerContent = ans.ExtraOptionIds; }
+                    }
+                    var question = questions.TryGetValue(ans.QuestionId, out var q) ? q : null;
+                    respDto.Answers.Add(new SurveyAnswerDto
+                    {
+                        QuestionId = ans.QuestionId,
+                        QuestionContent = question?.Content ?? ans.QuestionContent ?? "",
+                        AnswerContent = answerContent,
+                        QuestionTypeCode = question?.QuestionType?.Code ?? ""
+                    });
+                }
+                result.Add(respDto);
+            }
+            return result;
+        }
+    }
+}

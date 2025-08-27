@@ -1,0 +1,41 @@
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace api.Migrations
+{
+    /// <inheritdoc />
+    public partial class SetNullOptionIdInAnswer : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Answers_Options_OptionId",
+                table: "Answers");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Answers_Options_OptionId",
+                table: "Answers",
+                column: "OptionId",
+                principalTable: "Options",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.SetNull);
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Answers_Options_OptionId",
+                table: "Answers");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Answers_Options_OptionId",
+                table: "Answers",
+                column: "OptionId",
+                principalTable: "Options",
+                principalColumn: "Id");
+        }
+    }
+}

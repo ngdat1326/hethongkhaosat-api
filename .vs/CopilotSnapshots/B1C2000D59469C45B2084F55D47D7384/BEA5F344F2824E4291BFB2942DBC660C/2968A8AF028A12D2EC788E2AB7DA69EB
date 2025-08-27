@@ -1,0 +1,16 @@
+﻿using api.DTOs.Survey;
+using api.Models;
+using System.Threading.Tasks;
+
+namespace api.Interfaces.IRepositories
+{
+    public interface IResponseRepository
+    {
+        Task<Response> AddResponseAsync(Response response);
+    }
+
+    public interface IAnswerRepository
+    {
+        Task AddAnswersAsync(IEnumerable<Answer> answers);
+    }
+}

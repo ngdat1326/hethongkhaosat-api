@@ -1,0 +1,33 @@
+﻿using api.Report;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using api.Data;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ReportController : ControllerBase
+    {
+        private readonly ApplicationDbContext _context;
+        public ReportController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet("export-excel/{surveyId}")]
+        public IActionResult ExportExcel(int surveyId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+        {
+            var exporter = new SurveyExcelExporter(_context);
+            var stream = exporter.ExportSurveyResponsesToExcelCustom(surveyId, fromDate, toDate);
+            // Lấy tên khảo sát để đặt tên file
+            var survey = _context.Surveys.FirstOrDefault(s => s.Id == surveyId);
+            var fileName = $"{(survey?.Title ?? "Survey")}_{surveyId}_Responses.xlsx";
+            var encodedFileName = Uri.EscapeDataString(fileName);
+            Response.Headers.Remove("Content-Disposition");
+            Response.Headers.Add("Content-Disposition", $"attachment; filename=Survey.xlsx; filename*=UTF-8''{encodedFileName}");
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+    }
+}

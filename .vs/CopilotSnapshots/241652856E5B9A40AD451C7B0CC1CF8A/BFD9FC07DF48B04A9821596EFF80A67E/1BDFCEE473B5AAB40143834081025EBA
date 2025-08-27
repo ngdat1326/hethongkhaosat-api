@@ -1,0 +1,13 @@
+﻿using api.DTOs.User;
+
+namespace api.Interfaces.IServices
+{
+    public interface IUserService
+    {
+        Task<PagedResult<UserDto>> GetAllUserAsync(int page, int pageSize);
+        Task<UserDto> CreateUserAsync(CreateUserDto dto);
+        Task<UserDto> UpdateUserAsync(string id, UpdateUserDto dto);
+        Task<bool> DeleteUserAsync(string id);
+        Task<UserDto> SetUserActiveStatusAsync(string id, bool isActive);
+    }
+}

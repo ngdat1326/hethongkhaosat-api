@@ -1,0 +1,66 @@
+using api.DTOs.Option;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ManageOptionController : ControllerBase
+    {
+        private readonly IOptionService _service;
+        public ManageOptionController(IOptionService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var options = await _service.GetAllAsync();
+            return Ok(options);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var option = await _service.GetByIdAsync(id);
+            if (option == null) return NotFound();
+            return Ok(option);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(CreateOptionDto dto)
+        {
+            var option = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = option.Id }, option);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, UpdateOptionDto dto)
+        {
+            var option = await _service.UpdateAsync(id, dto);
+            if (option == null) return NotFound();
+            return Ok(option);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+
+        // API c?p nh?t toàn b? options cho m?t câu h?i (rating)
+        [HttpPost("replace-for-question/{questionId}")]
+        public async Task<IActionResult> ReplaceOptionsForQuestion(int questionId, [FromBody] List<CreateOptionDto> newOptions)
+        {
+            var result = await _service.ReplaceOptionsForQuestionAsync(questionId, newOptions);
+            if (!result) return BadRequest("Không th? c?p nh?t options cho câu h?i này.");
+            return Ok(new { success = true });
+        }
+    }
+}

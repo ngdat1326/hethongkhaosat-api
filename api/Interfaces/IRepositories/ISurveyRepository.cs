@@ -1,0 +1,15 @@
+using api.DTOs.Survey;
+
+namespace api.Interfaces.IRepositories
+{
+    public interface ISurveyRepository
+    {
+        Task<IEnumerable<SurveyDto>> GetAllAsync();
+        Task<SurveyDto?> GetByIdAsync(int id);
+        Task<SurveyDto> CreateAsync(CreateSurveyDto dto, string createdBy);
+        Task<SurveyDto?> UpdateAsync(int id, UpdateSurveyDto dto);
+        Task<bool> DeleteAsync(int id);
+        Task<bool> SetStatusAsync(int id, byte status);
+        Task<int> UpdateExpiredSurveysStatusAsync(byte expiredStatus = 2);
+    }
+}

@@ -1,0 +1,28 @@
+﻿using api.Report;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using api.Data;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ReportController : ControllerBase
+    {
+        private readonly ApplicationDbContext _context;
+        public ReportController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet("export-excel/{surveyId}")]
+        public IActionResult ExportExcel(int surveyId)
+        {
+            var exporter = new SurveyExcelExporter(_context);
+            var stream = exporter.ExportSurveyResponsesToExcel(surveyId);
+            var fileName = $"Survey_{surveyId}_Responses.xlsx";
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+    }
+}

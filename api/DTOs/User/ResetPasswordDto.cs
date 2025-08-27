@@ -1,0 +1,7 @@
+namespace api.DTOs.User
+{
+    public class ResetPasswordDto
+    {
+        public string UserId { get; set; } = null!;
+    }
+}

@@ -1,0 +1,15 @@
+using api.DTOs.Question;
+
+namespace api.Interfaces.IServices
+{
+    public interface IQuestionService
+    {
+        Task<IEnumerable<QuestionDto>> GetAllAsync();
+        Task<IEnumerable<QuestionDto>> GetAllBySurveyIdAsync(int surveyId);
+        Task<QuestionDto?> GetByIdAsync(int id);
+        Task<QuestionDto> CreateAsync(CreateQuestionDto dto);
+        Task<QuestionDto?> UpdateAsync(int id, UpdateQuestionDto dto);
+        Task<bool> DeleteAsync(int id);
+        Task UpdateOrderAsync(List<UpdateQuestionOrderDto> dtos);
+    }
+}

@@ -1,0 +1,22 @@
+using api.DTOs.Survey;
+using api.Interfaces.IRepositories;
+using api.Interfaces.IServices;
+
+namespace api.Services
+{
+    public class SurveyService : ISurveyService
+    {
+        private readonly ISurveyRepository _repo;
+        public SurveyService(ISurveyRepository repo)
+        {
+            _repo = repo;
+        }
+        public Task<IEnumerable<SurveyDto>> GetAllAsync() => _repo.GetAllAsync();
+        public Task<SurveyDto?> GetByIdAsync(int id) => _repo.GetByIdAsync(id);
+        public Task<SurveyDto> CreateAsync(CreateSurveyDto dto, string createdBy) => _repo.CreateAsync(dto, createdBy);
+        public Task<SurveyDto?> UpdateAsync(int id, UpdateSurveyDto dto) => _repo.UpdateAsync(id, dto);
+        public Task<bool> DeleteAsync(int id) => _repo.DeleteAsync(id);
+        public Task<bool> SetStatusAsync(int id, byte status) => _repo.SetStatusAsync(id, status);
+        public Task<int> UpdateExpiredSurveysStatusAsync(byte expiredStatus = 2) => _repo.UpdateExpiredSurveysStatusAsync(expiredStatus);
+    }
+}

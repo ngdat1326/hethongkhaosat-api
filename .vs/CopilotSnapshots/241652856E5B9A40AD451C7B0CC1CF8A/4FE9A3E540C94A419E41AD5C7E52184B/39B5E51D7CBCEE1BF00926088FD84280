@@ -1,0 +1,57 @@
+﻿using api.DTOs.QuestionType;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ManageQuestionTypeController : ControllerBase
+    {
+        private readonly IQuestionTypeService _service;
+        public ManageQuestionTypeController(IQuestionTypeService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var types = await _service.GetAllAsync();
+            return Ok(types);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var type = await _service.GetByIdAsync(id);
+            if (type == null) return NotFound();
+            return Ok(type);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(CreateQuestionTypeDto dto)
+        {
+            var type = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = type.Id }, type);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, UpdateQuestionTypeDto dto)
+        {
+            var type = await _service.UpdateAsync(id, dto);
+            if (type == null) return NotFound();
+            return Ok(type);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+    }
+}

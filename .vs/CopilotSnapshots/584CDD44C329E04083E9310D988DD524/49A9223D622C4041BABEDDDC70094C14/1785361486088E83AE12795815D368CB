@@ -1,0 +1,276 @@
+﻿using api.Data;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using ClosedXML.Excel;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Report
+{
+    public class SurveyExcelExporter
+    {
+        private readonly ApplicationDbContext _context;
+        public SurveyExcelExporter(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public MemoryStream ExportSurveyResponsesToExcel(int surveyId)
+        {
+            var questions = _context.Questions
+                .Where(q => q.SurveyId == surveyId)
+                .OrderBy(q => q.Order)
+                .ToList();
+            var responses = _context.Responses
+                .Include(r => r.Answers)
+                .Where(r => r.SurveyId == surveyId)
+                .ToList();
+            var options = _context.Options.ToList();
+
+            var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("SurveyResponses");
+
+            // Header
+            worksheet.Cell(1, 1).Value = "Mã phản hồi";
+            worksheet.Cell(1, 2).Value = "Ngày gửi";
+            worksheet.Cell(1, 1).Style.Font.FontName = "Arial";
+            worksheet.Cell(1, 2).Style.Font.FontName = "Arial";
+            worksheet.Cell(1, 1).Style.Font.Bold = true;
+            worksheet.Cell(1, 2).Style.Font.Bold = true;
+            for (int i = 0; i < questions.Count; i++)
+            {
+                worksheet.Cell(1, i + 3).Value = questions[i].Content;
+                worksheet.Cell(1, i + 3).Style.Font.FontName = "Arial";
+                worksheet.Cell(1, i + 3).Style.Font.Bold = true;
+            }
+
+            // Data
+            int row = 2;
+            foreach (var response in responses)
+            {
+                worksheet.Cell(row, 1).Value = response.Id;
+                worksheet.Cell(row, 2).Value = response.SubmittedAt;
+                worksheet.Cell(row, 2).Style.DateFormat.Format = "dd/MM/yyyy HH:mm:ss";
+                worksheet.Cell(row, 1).Style.Font.FontName = "Arial";
+                worksheet.Cell(row, 2).Style.Font.FontName = "Arial";
+                for (int i = 0; i < questions.Count; i++)
+                {
+                    var q = questions[i];
+                    var answer = response.Answers.FirstOrDefault(a =>
+                        (a.QuestionId == q.Id || a.QuestionIdBackup == q.Id));
+                    if (answer != null)
+                    {
+                        string cellValue = "";
+                        if (!string.IsNullOrEmpty(answer.AnswerContent))
+                            cellValue = answer.AnswerContent;
+                        else if (!string.IsNullOrEmpty(answer.TextAnswer))
+                            cellValue = answer.TextAnswer;
+                        else if (!string.IsNullOrEmpty(answer.ExtraOptionIdsBackup))
+                        {
+                            var ids = answer.ExtraOptionIdsBackup.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                            var optionContents = options.Where(o => ids.Contains(o.Id.ToString())).Select(o => o.Content);
+                            cellValue = string.Join(", ", optionContents);
+                        }
+                        else if (answer.OptionIdBackup.HasValue)
+                        {
+                            var opt = options.FirstOrDefault(o => o.Id == answer.OptionIdBackup.Value);
+                            if (opt != null) cellValue = opt.Content;
+                        }
+                        // Nếu là số, set kiểu số cho cell
+                        if (int.TryParse(cellValue, out int num))
+                        {
+                            worksheet.Cell(row, i + 3).Value = num;
+                            worksheet.Cell(row, i + 3).Style.NumberFormat.Format = "0";
+                        }
+                        else
+                        {
+                            worksheet.Cell(row, i + 3).Value = cellValue;
+                        }
+                        worksheet.Cell(row, i + 3).Style.Font.FontName = "Arial";
+                        worksheet.Cell(row, i + 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    }
+                    else
+                    {
+                        worksheet.Cell(row, i + 3).Value = "";
+                        worksheet.Cell(row, i + 3).Style.Font.FontName = "Arial";
+                        worksheet.Cell(row, i + 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    }
+                }
+                row++;
+            }
+
+            // AutoFit độ rộng cột sau khi ghi xong
+            worksheet.Columns().AdjustToContents();
+            // Tăng thêm width cho các cột để tiêu đề không bị cắt
+            for (int i = 1; i <= questions.Count + 2; i++)
+            {
+                var currentWidth = worksheet.Column(i).Width;
+                worksheet.Column(i).Width = currentWidth + 8; // Tăng thêm 8 đơn vị, có thể chỉnh lại nếu cần
+            }
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+            return stream;
+        }
+
+        public (MemoryStream, string) ExportSurveyResponsesToExcelWithName(int surveyId, DateTime? fromDate = null, DateTime? toDate = null)
+        {
+            var survey = _context.Surveys.FirstOrDefault(s => s.Id == surveyId);
+            var fileName = survey != null ? $"{survey.Title}_Responses.xlsx" : $"Survey_{surveyId}_Responses.xlsx";
+
+            var responses = _context.Responses
+                .Include(r => r.Answers)
+                .Where(r => r.SurveyId == surveyId)
+                .ToList();
+            var options = _context.Options.ToList();
+
+            // Lấy tất cả questionId và questionIdBackup từ Answer
+            var answerQuestions = _context.Answers
+                .Where(a => responses.Select(r => r.Id).Contains(a.ResponseId))
+                .Select(a => new {
+                    Id = a.QuestionId ?? a.QuestionIdBackup,
+                    Content = a.QuestionContent
+                })
+                .Where(a => a.Id.HasValue)
+                .GroupBy(a => a.Id.Value)
+                .Select(g => new { Id = g.Key, Content = g.Select(x => x.Content).FirstOrDefault(c => !string.IsNullOrEmpty(c)) })
+                .ToList();
+
+            // Lấy thêm các câu hỏi còn tồn tại trong bảng Questions
+            var dbQuestions = _context.Questions
+                .Where(q => q.SurveyId == surveyId)
+                .Select(q => new { Id = q.Id, Content = q.Content })
+                .ToList();
+
+            // Union tất cả câu hỏi (ưu tiên nội dung từ bảng Questions nếu còn tồn tại)
+            var allQuestions = answerQuestions
+                .Select(aq => {
+                    var dbq = dbQuestions.FirstOrDefault(q => q.Id == aq.Id);
+                    return dbq != null ? dbq : aq;
+                })
+                .Union(dbQuestions.Where(q => !answerQuestions.Any(aq => aq.Id == q.Id)))
+                .OrderBy(q => q.Id)
+                .ToList();
+
+            int colCount = allQuestions.Count + 2;
+            var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("SurveyResponses");
+
+            // Dòng 1: Tên khảo sát
+            worksheet.Cell(1, 1).Value = survey?.Title ?? $"Khảo sát #{surveyId}";
+            worksheet.Range(1, 1, 1, colCount).Merge().Style.Font.Bold = true;
+            worksheet.Range(1, 1, 1, colCount).Style.Font.FontName = "Arial";
+            worksheet.Range(1, 1, 1, colCount).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Dòng 2: Thời gian khảo sát
+            string timeText = "";
+            if (survey != null)
+            {
+                timeText = $"Thời gian: {survey.StartDate:dd/MM/yyyy} - {survey.EndDate:dd/MM/yyyy}";
+            }
+            else if (fromDate.HasValue && toDate.HasValue)
+            {
+                timeText = $"Thời gian: {fromDate:dd/MM/yyyy} - {toDate:dd/MM/yyyy}";
+            }
+            else if (responses.Any())
+            {
+                var minDate = responses.Min(r => r.SubmittedAt);
+                var maxDate = responses.Max(r => r.SubmittedAt);
+                timeText = $"Thời gian: {minDate:dd/MM/yyyy} - {maxDate:dd/MM/yyyy}";
+            }
+            worksheet.Cell(2, 1).Value = timeText;
+            worksheet.Range(2, 1, 2, colCount).Merge();
+            worksheet.Range(2, 1, 2, colCount).Style.Font.FontName = "Arial";
+            worksheet.Range(2, 1, 2, colCount).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Dòng 4: Header bảng dữ liệu
+            worksheet.Cell(4, 1).Value = "Mã phản hồi";
+            worksheet.Cell(4, 2).Value = "Ngày gửi";
+            worksheet.Cell(4, 1).Style.Font.FontName = "Arial";
+            worksheet.Cell(4, 2).Style.Font.FontName = "Arial";
+            worksheet.Cell(4, 1).Style.Font.Bold = true;
+            worksheet.Cell(4, 2).Style.Font.Bold = true;
+            worksheet.Cell(4, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            worksheet.Cell(4, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            for (int i = 0; i < allQuestions.Count; i++)
+            {
+                worksheet.Cell(4, i + 3).Value = allQuestions[i].Content;
+                worksheet.Cell(4, i + 3).Style.Font.FontName = "Arial";
+                worksheet.Cell(4, i + 3).Style.Font.Bold = true;
+                worksheet.Cell(4, i + 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            }
+
+            // Data bắt đầu từ dòng 5
+            int row = 5;
+            foreach (var response in responses)
+            {
+                worksheet.Cell(row, 1).Value = response.Id;
+                worksheet.Cell(row, 2).Value = response.SubmittedAt;
+                worksheet.Cell(row, 2).Style.DateFormat.Format = "dd/MM/yyyy HH:mm:ss";
+                worksheet.Cell(row, 1).Style.Font.FontName = "Arial";
+                worksheet.Cell(row, 2).Style.Font.FontName = "Arial";
+                worksheet.Cell(row, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                worksheet.Cell(row, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                for (int i = 0; i < allQuestions.Count; i++)
+                {
+                    var qId = allQuestions[i].Id;
+                    var answer = response.Answers.FirstOrDefault(a =>
+                        (a.QuestionId == qId || a.QuestionIdBackup == qId));
+                    if (answer != null)
+                    {
+                        string cellValue = "";
+                        if (!string.IsNullOrEmpty(answer.AnswerContent))
+                            cellValue = answer.AnswerContent;
+                        else if (!string.IsNullOrEmpty(answer.TextAnswer))
+                            cellValue = answer.TextAnswer;
+                        else if (!string.IsNullOrEmpty(answer.ExtraOptionIdsBackup))
+                        {
+                            var ids = answer.ExtraOptionIdsBackup.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                            var optionContents = options.Where(o => ids.Contains(o.Id.ToString())).Select(o => o.Content);
+                            cellValue = string.Join(", ", optionContents);
+                        }
+                        else if (answer.OptionIdBackup.HasValue)
+                        {
+                            var opt = options.FirstOrDefault(o => o.Id == answer.OptionIdBackup.Value);
+                            if (opt != null) cellValue = opt.Content;
+                        }
+                        // Nếu là số, set kiểu số cho cell
+                        if (int.TryParse(cellValue, out int num))
+                        {
+                            worksheet.Cell(row, i + 3).Value = num;
+                            worksheet.Cell(row, i + 3).Style.NumberFormat.Format = "0";
+                        }
+                        else
+                        {
+                            worksheet.Cell(row, i + 3).Value = cellValue;
+                        }
+                        worksheet.Cell(row, i + 3).Style.Font.FontName = "Arial";
+                        worksheet.Cell(row, i + 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    }
+                    else
+                    {
+                        worksheet.Cell(row, i + 3).Value = "";
+                        worksheet.Cell(row, i + 3).Style.Font.FontName = "Arial";
+                        worksheet.Cell(row, i + 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    }
+                }
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+            for (int i = 1; i <= colCount; i++)
+            {
+                var currentWidth = worksheet.Column(i).Width;
+                worksheet.Column(i).Width = currentWidth + 8;
+            }
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+            return (stream, fileName);
+        }
+    }
+}

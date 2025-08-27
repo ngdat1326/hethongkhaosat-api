@@ -1,0 +1,147 @@
+﻿using api.DTOs.Survey;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Mvc;
+using api.DTOs.QuestionType;
+using api.DTOs.Option;
+using api.DTOs.QuestionBranch;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+using api.Data;
+using api.Interfaces.IRepositories;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class PublicSurveyController : ControllerBase
+    {
+        private readonly ISurveyService _surveyService;
+        private readonly IQuestionService _questionService;
+        private readonly IQuestionTypeService _questionTypeService;
+        private readonly IOptionService _optionService;
+        private readonly IQuestionBranchService _questionBranchService;
+        private readonly ApplicationDbContext _context;
+        private readonly IResponseService _responseService;
+        public PublicSurveyController(
+            ISurveyService surveyService,
+            IQuestionService questionService,
+            IQuestionTypeService questionTypeService,
+            IOptionService optionService,
+            IQuestionBranchService questionBranchService,
+            ApplicationDbContext context,
+            IResponseService responseService)
+        {
+            _surveyService = surveyService;
+            _questionService = questionService;
+            _questionTypeService = questionTypeService;
+            _optionService = optionService;
+            _questionBranchService = questionBranchService;
+            _context = context;
+            _responseService = responseService;
+        }
+
+        [HttpGet("detail/{surveyId}")]
+        public async Task<IActionResult> GetSurveyDetail(int surveyId)
+        {
+            try
+            {
+                var survey = await _surveyService.GetByIdAsync(surveyId);
+                if (survey == null)
+                    return NotFound(new { error = "Survey not found" });
+                var questions = (await _questionService.GetAllBySurveyIdAsync(surveyId)).ToList();
+                var allTypes = (await _questionTypeService.GetAllAsync()).ToList();
+                var allOptions = (await _optionService.GetAllAsync()).ToList();
+                var allBranches = (await _questionBranchService.GetAllAsync()).ToList();
+                var nextQuestionIds = allBranches.Select(b => b.NextQuestionId).ToHashSet();
+                var questionDict = questions.ToDictionary(q => q.Id);
+                var typeDict = allTypes.ToDictionary(t => t.Id);
+                var optionDict = allOptions.GroupBy(o => o.QuestionId).ToDictionary(g => g.Key, g => g.ToList());
+                var branchDict = allBranches.GroupBy(b => b.CurrentQuestionId).ToDictionary(g => g.Key, g => g.ToList());
+                // Build tree recursively
+                QuestionTreeNodeDto? BuildTree(int questionId)
+                {
+                    if (!questionDict.TryGetValue(questionId, out var q)) return null;
+                    var node = new QuestionTreeNodeDto
+                    {
+                        Id = q.Id,
+                        Content = q.Content,
+                        Order = q.Order,
+                        IsRequired = q.IsRequired,
+                        QuestionType = typeDict[q.QuestionTypeId],
+                        Options = new List<OptionTreeNodeDto>()
+                    };
+                    if (optionDict.TryGetValue(q.Id, out var options))
+                    {
+                        foreach (var opt in options)
+                        {
+                            int? nextQid = null;
+                            string? conditionType = null;
+                            if (branchDict.TryGetValue(q.Id, out var branches))
+                            {
+                                var branch = branches.FirstOrDefault(b => b.OptionIds.Contains(opt.Id));
+                                nextQid = branch?.NextQuestionId;
+                                conditionType = branch?.ConditionType;
+                            }
+                            node.Options.Add(new OptionTreeNodeDto
+                            {
+                                Id = opt.Id,
+                                QuestionId = opt.QuestionId,
+                                Content = opt.Content,
+                                Value = opt.Value,
+                                NextQuestion = nextQid.HasValue ? BuildTree(nextQid.Value) : null,
+                                ConditionType = conditionType
+                            });
+                        }
+                    }
+                    return node;
+                }
+                var rootQuestionIds = questions.Where(q => !nextQuestionIds.Contains(q.Id)).OrderBy(q => q.Order).Select(q => q.Id).ToList();
+                var rootQuestions = new List<QuestionTreeNodeDto>();
+                foreach (var rootId in rootQuestionIds)
+                {
+                    var rootNode = BuildTree(rootId);
+                    if (rootNode != null)
+                        rootQuestions.Add(rootNode);
+                }
+                var result = new PublicSurveyTreeDetailDto
+                {
+                    Survey = survey,
+                    RootQuestions = rootQuestions
+                };
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] {ex}");
+                return StatusCode(500, new { error = "Internal server error", detail = ex.Message });
+            }
+        }
+
+        [HttpPost("submit")]
+        public async Task<IActionResult> SubmitSurvey([FromBody] SubmitSurveyResultDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+            await _responseService.SaveSurveyResultAsync(dto);
+            return Ok(new { message = "Survey submitted successfully" });
+        }
+
+        [HttpGet("responses/{surveyId}")]
+        public async Task<IActionResult> GetSurveyResponses(int surveyId)
+        {
+            var responses = await _responseService.GetSurveyResponsesAsync(surveyId);
+            return Ok(responses);
+        }
+
+        [HttpGet("active")]
+        public async Task<IActionResult> GetActiveSurveys()
+        {
+            var allSurveys = await _surveyService.GetAllAsync();
+            var now = DateTime.UtcNow;
+            var activeSurveys = allSurveys
+                .Where(s => s.Status == 1 && s.StartDate <= now && s.EndDate >= now)
+                .ToList();
+            return Ok(activeSurveys);
+        }
+    }
+}

@@ -1,0 +1,26 @@
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace api.DTOs.Survey
+{
+    public class SubmitSurveyResultDto
+    {
+        [Required]
+        public int SurveyId { get; set; }
+        public string? RespondentId { get; set; }
+        public List<SubmitAnswerDto> Answers { get; set; } = new();
+        // Thông tin chung
+        public string? FullName { get; set; }
+        public string? Position { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? CompanyName { get; set; }
+    }
+
+    public class SubmitAnswerDto
+    {
+        [Required]
+        public int QuestionId { get; set; }
+        public int? OptionId { get; set; } // SingleChoice
+        public string? TextAnswer { get; set; } // Text, Scale
+        public string? ExtraOptionIds { get; set; } // MultiChoice (JSON chu?i các OptionId)
+    }
+}

@@ -1,0 +1,62 @@
+﻿using api.DTOs;
+using api.DTOs.User;
+using api.Interfaces.IServices;
+using api.Models;
+using api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize(Roles = "Admin")]
+    public class ManageUserController : ControllerBase
+    {
+        private readonly IUserService _service;
+
+        public ManageUserController(IUserService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet("list-user")]
+        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            var users = await _service.GetAllUserAsync(page, pageSize);
+            return Ok(users);
+        }
+
+        [HttpPost("create-user")]
+        public async Task<IActionResult> Create(CreateUserDto dto)
+        {
+            var user = await _service.CreateUserAsync(dto);
+            return Ok(user);
+        }
+
+        [HttpPut("update-user/{id}")]
+        public async Task<IActionResult> UpdateUser(string id, UpdateUserDto dto)
+        {
+            var updated = await _service.UpdateUserAsync(id, dto);
+            return Ok(updated);
+        }
+
+        [HttpDelete("delete-user/{id}")]
+        public async Task<IActionResult> DeleteUser(string id)
+        {
+            var deleted = await _service.DeleteUserAsync(id);
+            if (!deleted) return NotFound("Không tìm thấy user.");
+            return NoContent();
+        }
+
+        // Dedicated endpoint for activating/deactivating a user
+        [HttpPut("set-active/{id}")]
+        public async Task<IActionResult> SetActiveStatus(string id, [FromQuery] bool isActive)
+        {
+            var user = await _service.SetUserActiveStatusAsync(id, isActive);
+            return Ok(user);
+        }
+    }
+}

@@ -1,0 +1,14 @@
+using api.DTOs.Option;
+
+namespace api.Interfaces.IServices
+{
+    public interface IOptionService
+    {
+        Task<IEnumerable<OptionDto>> GetAllAsync();
+        Task<OptionDto?> GetByIdAsync(int id);
+        Task<OptionDto> CreateAsync(CreateOptionDto dto);
+        Task<OptionDto?> UpdateAsync(int id, UpdateOptionDto dto);
+        Task<bool> DeleteAsync(int id);
+        Task<bool> ReplaceOptionsForQuestionAsync(int questionId, List<CreateOptionDto> newOptions);
+    }
+}

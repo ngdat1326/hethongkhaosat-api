@@ -1,0 +1,20 @@
+﻿using api.DTOs.Department;
+using api.Interfaces.IRepositories;
+using api.Interfaces.IServices;
+
+namespace api.Services
+{
+    public class DepartmentService : IDepartmentService
+    {
+        private readonly IDepartmentRepository _repo;
+        public DepartmentService(IDepartmentRepository repo)
+        {
+            _repo = repo;
+        }
+        public Task<IEnumerable<DepartmentDto>> GetAllAsync() => _repo.GetAllAsync();
+        public Task<DepartmentDto?> GetByIdAsync(int id) => _repo.GetByIdAsync(id);
+        public Task<DepartmentDto> CreateAsync(CreateDepartmentDto dto) => _repo.CreateAsync(dto);
+        public Task<DepartmentDto?> UpdateAsync(int id, UpdateDepartmentDto dto) => _repo.UpdateAsync(id, dto);
+        public Task<bool> DeleteAsync(int id) => _repo.DeleteAsync(id);
+    }
+}

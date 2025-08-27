@@ -1,0 +1,143 @@
+﻿using api.DTOs;
+using api.Models;
+using api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Net.Mail;
+using System.Net;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class AuthController : ControllerBase
+    {
+        private readonly UserManager<AppUser> _userManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly TokenService _tokenService;
+        private readonly ApplicationDbContext _context;
+
+        public AuthController(UserManager<AppUser> userManager, RoleManager<IdentityRole> roleManager, TokenService tokenService, ApplicationDbContext context)
+        {
+            _userManager = userManager;
+            _roleManager = roleManager;
+            _tokenService = tokenService;
+            _context = context;
+        }
+
+        [HttpPost("register")]
+        public async Task<IActionResult> Register(RegisterDto dto)
+        {
+            var user = new AppUser { UserName = dto.Username, Email = dto.Email, FullName = dto.FullName };
+            var result = await _userManager.CreateAsync(user, dto.Password);
+            if (!result.Succeeded) return BadRequest(result.Errors);
+            await _userManager.AddToRoleAsync(user, "User");
+            var token = await _tokenService.CreateToken(user, _userManager);
+            var refreshToken = _tokenService.GenerateRefreshToken();
+            await _tokenService.SaveRefreshToken(user, refreshToken, DateTime.UtcNow.AddDays(7));
+            return Ok(new { token, refreshToken });
+        }
+
+        [HttpPost("login")]
+        public async Task<IActionResult> Login(LoginDto dto)
+        {
+            var user = await _userManager.FindByNameAsync(dto.Username);
+            if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password)) return Unauthorized();
+            if (!user.IsActive)
+                return StatusCode(403, new { message = "Tài khoản của bạn đã bị vô hiệu hóa. Hãy liên hệ với quản trị viên" });
+            if (!user.IsEmailVerified)
+            {
+                // Sinh OTP
+                var otp = new Random().Next(100000, 999999).ToString();
+                var expiry = DateTime.UtcNow.AddMinutes(5);
+                var userOtp = new UserOtp
+                {
+                    UserId = user.Id,
+                    OtpCode = otp,
+                    Expiry = expiry,
+                    IsUsed = false
+                };
+                _context.UserOtps.Add(userOtp);
+                await _context.SaveChangesAsync();
+                // Gửi email OTP
+                await SendOtpEmail(user.Email, otp);
+                return Ok(new { requireOtp = true, message = "Vui lòng kiểm tra email để lấy mã OTP xác thực." });
+            }
+            var token = await _tokenService.CreateToken(user, _userManager);
+            var refreshToken = _tokenService.GenerateRefreshToken();
+            await _tokenService.SaveRefreshToken(user, refreshToken, DateTime.UtcNow.AddDays(7));
+            return Ok(new { token, refreshToken });
+        }
+
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpDto dto)
+        {
+            var user = await _userManager.FindByNameAsync(dto.Username);
+            if (user == null) return Unauthorized();
+            var otpEntity = await _context.UserOtps
+                .Where(x => x.UserId == user.Id && !x.IsUsed && x.Expiry > DateTime.UtcNow)
+                .OrderByDescending(x => x.Expiry)
+                .FirstOrDefaultAsync();
+            if (otpEntity == null || otpEntity.OtpCode != dto.OtpCode)
+                return BadRequest(new { message = "Mã OTP không hợp lệ hoặc đã hết hạn." });
+            otpEntity.IsUsed = true;
+            user.IsEmailVerified = true;
+            _context.UserOtps.Update(otpEntity);
+            await _userManager.UpdateAsync(user);
+            await _context.SaveChangesAsync();
+            var token = await _tokenService.CreateToken(user, _userManager);
+            var refreshToken = _tokenService.GenerateRefreshToken();
+            await _tokenService.SaveRefreshToken(user, refreshToken, DateTime.UtcNow.AddDays(7));
+            return Ok(new { token, refreshToken });
+        }
+
+        private async Task SendOtpEmail(string email, string otp)
+        {
+            // TODO: Thay thế bằng dịch vụ gửi email thực tế
+            // Ví dụ sử dụng SmtpClient hoặc dịch vụ bên thứ 3
+            await Task.CompletedTask;
+        }
+
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken([FromBody] string refreshToken)
+        {
+            var tokenEntity = await _tokenService.GetValidRefreshToken(refreshToken);
+            if (tokenEntity == null) return Unauthorized();
+            var user = tokenEntity.User;
+            var newToken = await _tokenService.CreateToken(user, _userManager);
+            var newRefreshToken = _tokenService.GenerateRefreshToken();
+            await _tokenService.SaveRefreshToken(user, newRefreshToken, DateTime.UtcNow.AddDays(7));
+            await _tokenService.RevokeRefreshToken(refreshToken);
+            return Ok(new { token = newToken, refreshToken = newRefreshToken });
+        }
+
+        [HttpPost("revoke-refresh-token")]
+        public async Task<IActionResult> RevokeRefreshToken([FromBody] string refreshToken)
+        {
+            await _tokenService.RevokeRefreshToken(refreshToken);
+            return Ok();
+        }
+
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
+        {
+            if (dto.NewPassword != dto.ConfirmPassword)
+                return BadRequest(new { message = "Mật khẩu mới và xác nhận mật khẩu không khớp." });
+            var userName = User.Identity?.Name;
+            if (string.IsNullOrEmpty(userName)) return Unauthorized();
+            var user = await _userManager.FindByNameAsync(userName);
+            if (user == null) return Unauthorized();
+            if (!await _userManager.CheckPasswordAsync(user, dto.CurrentPassword))
+                return BadRequest(new { message = "Mật khẩu cũ không đúng." });
+            var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+            return Ok(new { message = "Password changed successfully." });
+        }
+    }
+}

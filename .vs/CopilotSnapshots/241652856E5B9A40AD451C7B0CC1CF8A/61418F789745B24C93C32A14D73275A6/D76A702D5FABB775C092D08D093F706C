@@ -1,0 +1,57 @@
+﻿using api.DTOs.Question;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ManageQuestionController : ControllerBase
+    {
+        private readonly IQuestionService _service;
+        public ManageQuestionController(IQuestionService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var questions = await _service.GetAllAsync();
+            return Ok(questions);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var question = await _service.GetByIdAsync(id);
+            if (question == null) return NotFound();
+            return Ok(question);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(CreateQuestionDto dto)
+        {
+            var question = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = question.Id }, question);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, UpdateQuestionDto dto)
+        {
+            var question = await _service.UpdateAsync(id, dto);
+            if (question == null) return NotFound();
+            return Ok(question);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+    }
+}

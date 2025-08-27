@@ -1,0 +1,98 @@
+﻿using api.DTOs.Survey;
+using api.Models;
+using api.Interfaces.IRepositories;
+using api.Interfaces.IServices;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+
+namespace api.Services
+{
+    public class ResponseService : IResponseService
+    {
+        private readonly IResponseRepository _responseRepo;
+        private readonly ApplicationDbContext _context;
+        public ResponseService(IResponseRepository responseRepo, IAnswerRepository answerRepo, ApplicationDbContext context)
+        {
+            _responseRepo = responseRepo;
+            _context = context;
+        }
+        public async Task SaveSurveyResultAsync(SubmitSurveyResultDto dto)
+        {
+            var response = new Response
+            {
+                SurveyId = dto.SurveyId,
+                RespondentId = dto.RespondentId,
+                SubmittedAt = DateTime.Now
+            };
+            response = await _responseRepo.AddResponseAsync(response);
+            var questionIds = dto.Answers.Select(a => a.QuestionId).Distinct().ToList();
+            var questions = await _questionRepo.GetQuestionsByIdsAsync(questionIds);
+            var answers = dto.Answers.Select(ans => {
+                var question = questions.FirstOrDefault(q => q.Id == ans.QuestionId);
+                return new Answer
+                {
+                    ResponseId = response.Id,
+                    QuestionId = ans.QuestionId,
+                    OptionId = ans.OptionId,
+                    TextAnswer = ans.TextAnswer,
+                    ExtraOptionIds = ans.ExtraOptionIds,
+                    QuestionContent = question?.Content
+                };
+            }).ToList();
+            await _answerRepo.AddAnswersAsync(answers);
+        }
+
+        public async Task<List<SurveyResponseDto>> GetSurveyResponsesAsync(int surveyId)
+        {
+            var responses = await _responseRepo.GetResponsesBySurveyIdAsync(surveyId);
+            var questionDict = await _context.Questions.Include(q => q.QuestionType).ToDictionaryAsync(q => q.Id);
+            var optionDict = await _context.Options.ToDictionaryAsync(o => o.Id);
+            var result = new List<SurveyResponseDto>();
+            foreach (var resp in responses)
+            {
+                var respDto = new SurveyResponseDto
+                {
+                    ResponseId = resp.Id,
+                    SurveyId = resp.SurveyId,
+                    RespondentId = resp.RespondentId,
+                    SubmittedAt = resp.SubmittedAt,
+                    Answers = new List<SurveyAnswerResultDto>()
+                };
+                foreach (var ans in resp.Answers)
+                {
+                    var q = questionDict.GetValueOrDefault(ans.QuestionId);
+                    var questionType = q?.QuestionType;
+                    var answerDto = new SurveyAnswerResultDto
+                    {
+                        QuestionId = ans.QuestionId,
+                        QuestionContent = q?.Content ?? "",
+                        QuestionTypeCode = questionType?.Code ?? "",
+                        QuestionTypeName = questionType?.Name ?? "",
+                        OptionId = ans.OptionId,
+                        OptionContent = ans.OptionId.HasValue && optionDict.ContainsKey(ans.OptionId.Value) ? optionDict[ans.OptionId.Value].Content : null,
+                        TextAnswer = ans.TextAnswer,
+                        ExtraOptions = null
+                    };
+                    if (!string.IsNullOrEmpty(ans.ExtraOptionIds))
+                    {
+                        try
+                        {
+                            var ids = JsonSerializer.Deserialize<List<int>>(ans.ExtraOptionIds);
+                            if (ids != null)
+                            {
+                                answerDto.ExtraOptions = ids
+                                    .Where(optionDict.ContainsKey)
+                                    .Select(id => new OptionResultDto { OptionId = id, Content = optionDict[id].Content })
+                                    .ToList();
+                            }
+                        }
+                        catch { }
+                    }
+                    respDto.Answers.Add(answerDto);
+                }
+                result.Add(respDto);
+            }
+            return result;
+        }
+    }
+}

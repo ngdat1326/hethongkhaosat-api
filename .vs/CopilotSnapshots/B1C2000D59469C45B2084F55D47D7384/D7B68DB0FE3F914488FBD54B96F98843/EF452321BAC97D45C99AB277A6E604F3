@@ -1,0 +1,11 @@
+﻿using api.DTOs.QuestionType;
+using System.Text.Json.Serialization;
+
+namespace api.DTOs.Survey
+{
+    public class SurveyDetailDto
+    {
+        public SurveyDto Survey { get; set; } = null!;
+        public List<QuestionTreeNodeDto> RootQuestions { get; set; } = new(); // Thay thế danh sách phẳng bằng cây
+    }
+}

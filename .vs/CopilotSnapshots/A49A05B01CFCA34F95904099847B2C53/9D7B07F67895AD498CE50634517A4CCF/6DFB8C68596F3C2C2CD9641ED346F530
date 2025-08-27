@@ -1,0 +1,141 @@
+﻿using api.Data;
+using api.DTOs.Survey;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Services
+{
+    public class SurveyAnalyticsService
+    {
+        private readonly ApplicationDbContext _context;
+        public SurveyAnalyticsService(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public List<SurveyAnalyticsQuestionDto> GetSurveyAnalytics(int surveyId)
+        {
+            var questions = _context.Questions
+                .Include(q => q.Options)
+                .Include(q => q.QuestionType)
+                .Where(q => q.SurveyId == surveyId)
+                .OrderBy(q => q.Order)
+                .ToList();
+            var responses = _context.Responses
+                .Where(r => r.SurveyId == surveyId)
+                .Select(r => r.Id)
+                .ToList();
+            var answers = _context.Answers
+                .Where(a => responses.Contains(a.ResponseId))
+                .ToList();
+
+            var result = new List<SurveyAnalyticsQuestionDto>();
+            foreach (var q in questions)
+            {
+                var qAnswers = answers.Where(a => (a.QuestionId == q.Id || a.QuestionIdBackup == q.Id)).ToList();
+                int totalAnswers = qAnswers.Count;
+                if (q.QuestionType.Code == "SingleChoice")
+                {
+                    totalAnswers = qAnswers.Count(a => a.OptionId != null || a.OptionIdBackup != null);
+                }
+                else if (q.QuestionType.Code == "MultiChoice")
+                {
+                    // ??m s? answer có ít nh?t 1 l?a ch?n (OptionId, OptionIdBackup, ExtraOptionIds, ExtraOptionIdsBackup)
+                    totalAnswers = qAnswers.Count(a =>
+                        (a.OptionId != null || a.OptionIdBackup != null) ||
+                        (ParseMultiOptionIds(a.ExtraOptionIds).Count > 0) ||
+                        (ParseMultiOptionIds(a.ExtraOptionIdsBackup).Count > 0)
+                    );
+                }
+                var dto = new SurveyAnalyticsQuestionDto
+                {
+                    QuestionId = q.Id,
+                    QuestionContent = q.Content,
+                    Type = q.QuestionType.Code,
+                    TotalAnswers = totalAnswers
+                };
+                if (q.QuestionType.Code == "SingleChoice")
+                {
+                    var options = q.Options?.ToList() ?? new List<api.Models.Option>();
+                    var optionStats = new List<SurveyAnalyticsOptionDto>();
+                    foreach (var opt in options)
+                    {
+                        int count = qAnswers.Count(a => (a.OptionId == opt.Id || a.OptionIdBackup == opt.Id));
+                        double percent = totalAnswers > 0 ? (count * 100.0 / totalAnswers) : 0;
+                        optionStats.Add(new SurveyAnalyticsOptionDto
+                        {
+                            OptionId = opt.Id,
+                            Content = opt.Content,
+                            Count = count,
+                            Percent = Math.Round(percent, 2)
+                        });
+                    }
+                    dto.Options = optionStats;
+                }
+                else if (q.QuestionType.Code == "MultiChoice")
+                {
+                    var options = q.Options?.ToList() ?? new List<api.Models.Option>();
+                    var optionStats = new List<SurveyAnalyticsOptionDto>();
+                    foreach (var opt in options)
+                    {
+                        int count = 0;
+                        count += qAnswers.Count(a => a.OptionId == opt.Id);
+                        count += qAnswers.Count(a => a.OptionIdBackup == opt.Id);
+                        count += qAnswers.SelectMany(a => ParseMultiOptionIds(a.ExtraOptionIds)).Count(x => x == opt.Id);
+                        count += qAnswers.SelectMany(a => ParseMultiOptionIds(a.ExtraOptionIdsBackup)).Count(x => x == opt.Id);
+                        double percent = totalAnswers > 0 ? (count * 100.0 / totalAnswers) : 0;
+                        optionStats.Add(new SurveyAnalyticsOptionDto
+                        {
+                            OptionId = opt.Id,
+                            Content = opt.Content,
+                            Count = count,
+                            Percent = Math.Round(percent, 2)
+                        });
+                    }
+                    dto.Options = optionStats;
+                }
+                else if (q.QuestionType.Code == "Rating" || q.QuestionType.Code == "Scale")
+                {
+                    var ratingCounts = new Dictionary<string, int>();
+                    double total = 0;
+                    int count = 0;
+                    foreach (var a in qAnswers)
+                    {
+                        if (int.TryParse(a.AnswerContent ?? a.TextAnswer, out int val))
+                        {
+                            string key = val.ToString();
+                            if (!ratingCounts.ContainsKey(key)) ratingCounts[key] = 0;
+                            ratingCounts[key]++;
+                            total += val;
+                            count++;
+                        }
+                    }
+                    dto.Counts = ratingCounts;
+                    dto.Average = count > 0 ? Math.Round(total / count, 2) : null;
+                }
+                else if (q.QuestionType.Code == "Text")
+                {
+                    dto.Answers = qAnswers
+                        .Where(a => !string.IsNullOrWhiteSpace(a.TextAnswer))
+                        .Select(a => a.TextAnswer!.Trim())
+                        .ToList();
+                }
+                result.Add(dto);
+            }
+            return result;
+        }
+
+        // Helper: parse chu?i ki?u [255,256] thành List<int>
+        private static List<int> ParseMultiOptionIds(string? raw)
+        {
+            var result = new List<int>();
+            if (string.IsNullOrWhiteSpace(raw)) return result;
+            var cleaned = raw.Replace("[", "").Replace("]", "");
+            var parts = cleaned.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var part in parts)
+            {
+                if (int.TryParse(part, out var id)) result.Add(id);
+            }
+            return result;
+        }
+    }
+}

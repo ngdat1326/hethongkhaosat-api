@@ -1,0 +1,139 @@
+﻿using System.Security.Claims;
+using api.DTOs.Survey;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using api.DTOs.QuestionType;
+using api.DTOs.Question;
+using api.DTOs.Option;
+using api.DTOs.QuestionBranch;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ManageSurveyController : ControllerBase
+    {
+        private readonly ISurveyService _service;
+        private readonly IQuestionService _questionService;
+        private readonly IQuestionTypeService _questionTypeService;
+        private readonly IOptionService _optionService;
+        private readonly IQuestionBranchService _questionBranchService;
+        public ManageSurveyController(
+            ISurveyService service,
+            IQuestionService questionService,
+            IQuestionTypeService questionTypeService,
+            IOptionService optionService,
+            IQuestionBranchService questionBranchService)
+        {
+            _service = service;
+            _questionService = questionService;
+            _questionTypeService = questionTypeService;
+            _optionService = optionService;
+            _questionBranchService = questionBranchService;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var surveys = await _service.GetAllAsync();
+            return Ok(surveys);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var survey = await _service.GetByIdAsync(id);
+            if (survey == null) return NotFound();
+            return Ok(survey);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(CreateSurveyDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+            var survey = await _service.CreateAsync(new CreateSurveyDto {
+                Title = dto.Title,
+                Description = dto.Description,
+                StartDate = dto.StartDate,
+                EndDate = dto.EndDate,
+                DepartmentId = dto.DepartmentId
+            }, userId);
+            return CreatedAtAction(nameof(GetById), new { id = survey.Id }, survey);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, UpdateSurveyDto dto)
+        {
+            var survey = await _service.UpdateAsync(id, dto);
+            if (survey == null) return NotFound();
+            return Ok(survey);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+
+        [HttpPut("set-status/{id}")]
+        public async Task<IActionResult> SetStatus(int id, [FromQuery] byte status)
+        {
+            var updated = await _service.SetStatusAsync(id, status);
+            if (!updated) return NotFound();
+            return Ok(new { message = "Status updated." });
+        }
+
+        [HttpGet("detail/{surveyId}")]
+        public async Task<IActionResult> GetSurveyDetail(int surveyId)
+        {
+            var survey = await _service.GetByIdAsync(surveyId);
+            if (survey == null) return NotFound();
+            var questions = await _questionService.GetAllBySurveyIdAsync(surveyId);
+            var allTypes = await _questionTypeService.GetAllAsync();
+            var allOptions = await _optionService.GetAllAsync();
+            var allBranches = await _questionBranchService.GetAllAsync();
+            var questionDetails = new List<QuestionDetailDto>();
+            foreach (var q in questions)
+            {
+                var type = allTypes.FirstOrDefault(t => t.Id == q.QuestionTypeId);
+                var options = allOptions.Where(o => o.QuestionId == q.Id).ToList();
+                var optionBranches = new List<OptionBranchDto>();
+                foreach (var opt in options)
+                {
+                    var branchesForOption = allBranches.Where(b => b.CurrentQuestionId == q.Id && b.OptionIds.Contains(opt.Id)).ToList();
+                    optionBranches.Add(new OptionBranchDto
+                    {
+                        Id = opt.Id,
+                        QuestionId = opt.QuestionId,
+                        Content = opt.Content,
+                        Value = opt.Value,
+                        NextQuestionId = branchesForOption.FirstOrDefault()?.NextQuestionId
+                    });
+                }
+                var branches = allBranches.Where(b => b.CurrentQuestionId == q.Id).ToList();
+                var filteredBranches = branches;
+                questionDetails.Add(new QuestionDetailDto
+                {
+                    Id = q.Id,
+                    Content = q.Content,
+                    Order = q.Order,
+                    IsRequired = q.IsRequired,
+                    QuestionType = type!,
+                    Options = optionBranches,
+                    Branches = filteredBranches
+                });
+            }
+            var result = new SurveyDetailDto
+            {
+                Survey = survey,
+                Questions = questionDetails
+            };
+            return Ok(result);
+        }
+    }
+}

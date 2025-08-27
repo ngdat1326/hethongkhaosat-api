@@ -1,0 +1,126 @@
+using api.Data;
+using api.DTOs.Survey;
+using api.Interfaces.IRepositories;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Repositories
+{
+    public class SurveyRepository : ISurveyRepository
+    {
+        private readonly ApplicationDbContext _context;
+        public SurveyRepository(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+        public async Task<IEnumerable<SurveyDto>> GetAllAsync()
+        {
+            return await _context.Surveys.Select(s => new SurveyDto
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                StartDate = s.StartDate,
+                EndDate = s.EndDate,
+                CreatedBy = s.CreatedBy,
+                DepartmentId = s.DepartmentId,
+                Status = s.Status
+            }).ToListAsync();
+        }
+        public async Task<SurveyDto?> GetByIdAsync(int id)
+        {
+            var s = await _context.Surveys.FindAsync(id);
+            if (s == null) return null;
+            return new SurveyDto
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                StartDate = s.StartDate,
+                EndDate = s.EndDate,
+                CreatedBy = s.CreatedBy,
+                DepartmentId = s.DepartmentId,
+                Status = s.Status
+            };
+        }
+        public async Task<SurveyDto> CreateAsync(CreateSurveyDto dto, string createdBy)
+        {
+            var s = new Survey
+            {
+                Title = dto.Title,
+                Description = dto.Description,
+                StartDate = dto.StartDate,
+                EndDate = dto.EndDate,
+                CreatedBy = createdBy,
+                DepartmentId = dto.DepartmentId,
+                Status = 0 // Always Draft
+            };
+            _context.Surveys.Add(s);
+            await _context.SaveChangesAsync();
+            return new SurveyDto
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                StartDate = s.StartDate,
+                EndDate = s.EndDate,
+                CreatedBy = s.CreatedBy,
+                DepartmentId = s.DepartmentId,
+                Status = s.Status
+            };
+        }
+        public async Task<SurveyDto?> UpdateAsync(int id, UpdateSurveyDto dto)
+        {
+            var s = await _context.Surveys.FindAsync(id);
+            if (s == null) return null;
+            s.Title = dto.Title ?? s.Title;
+            s.Description = dto.Description ?? s.Description;
+            s.StartDate = dto.StartDate ?? s.StartDate;
+            s.EndDate = dto.EndDate ?? s.EndDate;
+            s.DepartmentId = dto.DepartmentId ?? s.DepartmentId;
+            s.Status = 0; // Always Draft on update
+            await _context.SaveChangesAsync();
+            return new SurveyDto
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                StartDate = s.StartDate,
+                EndDate = s.EndDate,
+                CreatedBy = s.CreatedBy,
+                DepartmentId = s.DepartmentId,
+                Status = s.Status
+            };
+        }
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var s = await _context.Surveys.FindAsync(id);
+            if (s == null) return false;
+            _context.Surveys.Remove(s);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<bool> SetStatusAsync(int id, byte status)
+        {
+            var s = await _context.Surveys.FindAsync(id);
+            if (s == null) return false;
+            s.Status = status;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<int> UpdateExpiredSurveysStatusAsync(byte expiredStatus = 2)
+        {
+            var now = DateTime.UtcNow;
+            var expiredSurveys = await _context.Surveys
+                .Where(s => s.Status == 1 && s.EndDate < now)
+                .ToListAsync();
+            foreach (var survey in expiredSurveys)
+            {
+                survey.Status = expiredStatus;
+            }
+            _context.Surveys.UpdateRange(expiredSurveys);
+            var count = await _context.SaveChangesAsync();
+            return expiredSurveys.Count;
+        }
+    }
+}

@@ -1,0 +1,102 @@
+﻿using api.Data;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using ClosedXML.Excel;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Report
+{
+    public class SurveyExcelExporter
+    {
+        private readonly ApplicationDbContext _context;
+        public SurveyExcelExporter(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public MemoryStream ExportSurveyResponsesToExcel(int surveyId)
+        {
+            var questions = _context.Questions
+                .Where(q => q.SurveyId == surveyId)
+                .OrderBy(q => q.Order)
+                .ToList();
+            var responses = _context.Responses
+                .Include(r => r.Answers)
+                .Where(r => r.SurveyId == surveyId)
+                .ToList();
+            var options = _context.Options.ToList();
+
+            var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("SurveyResponses");
+
+            // Header
+            worksheet.Cell(1, 1).Value = "Mã phản hồi";
+            worksheet.Cell(1, 2).Value = "Ngày gửi";
+            worksheet.Cell(1, 1).Style.Font.FontName = "Arial";
+            worksheet.Cell(1, 2).Style.Font.FontName = "Arial";
+            worksheet.Cell(1, 1).Style.Font.Bold = true;
+            worksheet.Cell(1, 2).Style.Font.Bold = true;
+            for (int i = 0; i < questions.Count; i++)
+            {
+                worksheet.Cell(1, i + 3).Value = questions[i].Content;
+                worksheet.Cell(1, i + 3).Style.Font.FontName = "Arial";
+                worksheet.Cell(1, i + 3).Style.Font.Bold = true;
+            }
+
+            // Data
+            int row = 2;
+            foreach (var response in responses)
+            {
+                worksheet.Cell(row, 1).Value = response.Id;
+                worksheet.Cell(row, 2).Value = response.SubmittedAt;
+                worksheet.Cell(row, 2).Style.DateFormat.Format = "dd/MM/yyyy HH:mm:ss";
+                worksheet.Cell(row, 1).Style.Font.FontName = "Arial";
+                worksheet.Cell(row, 2).Style.Font.FontName = "Arial";
+                for (int i = 0; i < questions.Count; i++)
+                {
+                    var q = questions[i];
+                    var answer = response.Answers.FirstOrDefault(a =>
+                        (a.QuestionId == q.Id || a.QuestionIdBackup == q.Id));
+                    if (answer != null)
+                    {
+                        string cellValue = "";
+                        if (!string.IsNullOrEmpty(answer.AnswerContent))
+                            cellValue = answer.AnswerContent;
+                        else if (!string.IsNullOrEmpty(answer.TextAnswer))
+                            cellValue = answer.TextAnswer;
+                        else if (!string.IsNullOrEmpty(answer.ExtraOptionIdsBackup))
+                        {
+                            var ids = answer.ExtraOptionIdsBackup.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                            var optionContents = options.Where(o => ids.Contains(o.Id.ToString())).Select(o => o.Content);
+                            cellValue = string.Join(", ", optionContents);
+                        }
+                        else if (answer.OptionIdBackup.HasValue)
+                        {
+                            var opt = options.FirstOrDefault(o => o.Id == answer.OptionIdBackup.Value);
+                            if (opt != null) cellValue = opt.Content;
+                        }
+                        worksheet.Cell(row, i + 3).Value = cellValue;
+                        worksheet.Cell(row, i + 3).Style.Font.FontName = "Arial";
+                    }
+                    else
+                    {
+                        worksheet.Cell(row, i + 3).Value = "";
+                        worksheet.Cell(row, i + 3).Style.Font.FontName = "Arial";
+                    }
+                }
+                row++;
+            }
+
+            // AutoFit độ rộng cột sau khi ghi xong
+            worksheet.Columns().AdjustToContents();
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+            return stream;
+        }
+    }
+}

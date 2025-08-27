@@ -1,0 +1,17 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace api.Models
+{
+    public class QuestionType
+    {
+        [Key]
+        public int Id { get; set; }
+        [MaxLength(50)]
+        public string Code { get; set; } = null!;
+        [MaxLength(100)]
+        public string Name { get; set; } = null!;
+        [MaxLength(255)]
+        public string? Description { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

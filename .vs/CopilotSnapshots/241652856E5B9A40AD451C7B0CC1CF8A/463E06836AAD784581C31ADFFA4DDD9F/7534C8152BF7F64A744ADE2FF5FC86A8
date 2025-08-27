@@ -1,0 +1,81 @@
+﻿using api.Data;
+using api.DTOs.QuestionBranch;
+using api.Interfaces.IRepositories;
+using api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace api.Repositories
+{
+    public class QuestionBranchRepository : IQuestionBranchRepository
+    {
+        private readonly ApplicationDbContext _context;
+        public QuestionBranchRepository(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+        public async Task<IEnumerable<QuestionBranchDto>> GetAllAsync()
+        {
+            return await _context.QuestionBranches.Select(qb => new QuestionBranchDto
+            {
+                Id = qb.Id,
+                CurrentQuestionId = qb.CurrentQuestionId,
+                OptionId = qb.OptionId,
+                NextQuestionId = qb.NextQuestionId
+            }).ToListAsync();
+        }
+        public async Task<QuestionBranchDto?> GetByIdAsync(int id)
+        {
+            var qb = await _context.QuestionBranches.FindAsync(id);
+            if (qb == null) return null;
+            return new QuestionBranchDto
+            {
+                Id = qb.Id,
+                CurrentQuestionId = qb.CurrentQuestionId,
+                OptionId = qb.OptionId,
+                NextQuestionId = qb.NextQuestionId
+            };
+        }
+        public async Task<QuestionBranchDto> CreateAsync(CreateQuestionBranchDto dto)
+        {
+            var qb = new QuestionBranch
+            {
+                CurrentQuestionId = dto.CurrentQuestionId,
+                OptionId = dto.OptionId,
+                NextQuestionId = dto.NextQuestionId
+            };
+            _context.QuestionBranches.Add(qb);
+            await _context.SaveChangesAsync();
+            return new QuestionBranchDto
+            {
+                Id = qb.Id,
+                CurrentQuestionId = qb.CurrentQuestionId,
+                OptionId = qb.OptionId,
+                NextQuestionId = qb.NextQuestionId
+            };
+        }
+        public async Task<QuestionBranchDto?> UpdateAsync(int id, UpdateQuestionBranchDto dto)
+        {
+            var qb = await _context.QuestionBranches.FindAsync(id);
+            if (qb == null) return null;
+            qb.CurrentQuestionId = dto.CurrentQuestionId ?? qb.CurrentQuestionId;
+            qb.OptionId = dto.OptionId ?? qb.OptionId;
+            qb.NextQuestionId = dto.NextQuestionId ?? qb.NextQuestionId;
+            await _context.SaveChangesAsync();
+            return new QuestionBranchDto
+            {
+                Id = qb.Id,
+                CurrentQuestionId = qb.CurrentQuestionId,
+                OptionId = qb.OptionId,
+                NextQuestionId = qb.NextQuestionId
+            };
+        }
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var qb = await _context.QuestionBranches.FindAsync(id);
+            if (qb == null) return false;
+            _context.QuestionBranches.Remove(qb);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+    }
+}

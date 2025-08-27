@@ -1,0 +1,21 @@
+using api.DTOs.Question;
+using api.Models;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace api.Interfaces.IRepositories
+{
+    public interface IQuestionRepository
+    {
+        Task<IEnumerable<QuestionDto>> GetAllAsync();
+        Task<IEnumerable<QuestionDto>> GetAllBySurveyIdAsync(int surveyId);
+        Task<QuestionDto?> GetByIdAsync(int id);
+        Task<QuestionDto> CreateAsync(CreateQuestionDto dto);
+        Task<QuestionDto?> UpdateAsync(int id, UpdateQuestionDto dto);
+        Task<bool> DeleteAsync(int id);
+        Task<List<Question>> GetQuestionsByIdsAsync(List<int> ids);
+        // Thêm hàm l?y t?t c? các questionId con (?? quy)
+        Task<List<int>> GetAllDescendantQuestionIdsAsync(int rootId);
+        Task UpdateOrderAsync(List<UpdateQuestionOrderDto> dtos);
+    }
+}

@@ -1,0 +1,36 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize(Roles = "Admin,User")]
+    public class DashboardController : ControllerBase
+    {
+        [HttpGet("data")]
+        public IActionResult GetDashboardData()
+        {
+            if (User.IsInRole("Admin"))
+            {
+                return Ok(new
+                {
+                    role = "Admin",
+                    message = "Welcome Admin! You have full access."
+                });
+            }
+
+            if (User.IsInRole("User"))
+            {
+                return Ok(new
+                {
+                    role = "User",
+                    message = "Welcome User! You have limited access."
+                });
+            }
+
+            return Forbid();
+        }
+    }
+}

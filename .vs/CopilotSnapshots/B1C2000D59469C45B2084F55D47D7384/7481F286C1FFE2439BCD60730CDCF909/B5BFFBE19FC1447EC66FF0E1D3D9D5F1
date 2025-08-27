@@ -1,0 +1,57 @@
+﻿using api.DTOs.QuestionBranch;
+using api.Interfaces.IServices;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace api.Controllers.admin
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class ManageQuestionBranchController : ControllerBase
+    {
+        private readonly IQuestionBranchService _service;
+        public ManageQuestionBranchController(IQuestionBranchService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var branches = await _service.GetAllAsync();
+            return Ok(branches);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var branch = await _service.GetByIdAsync(id);
+            if (branch == null) return NotFound();
+            return Ok(branch);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Create(CreateQuestionBranchDto dto)
+        {
+            var branch = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = branch.Id }, branch);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, UpdateQuestionBranchDto dto)
+        {
+            var branch = await _service.UpdateAsync(id, dto);
+            if (branch == null) return NotFound();
+            return Ok(branch);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+    }
+}

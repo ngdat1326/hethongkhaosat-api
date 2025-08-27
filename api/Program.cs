@@ -180,12 +180,26 @@ app.UseCors("AllowFrontend"); // Sử dụng CORS policy đã định nghĩa
 app.MapControllers();
 app.Run();
 
-// Test
-var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-    .UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
-    .Options;
-
-using (var context = new ApplicationDbContext(options))
+using (var scope = app.Services.CreateScope())
 {
-    context.Database.EnsureCreated();
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<ApplicationDbContext>();
+
+    // Apply migration mới nhất (tạo/sửa bảng nếu cần)
+    context.Database.Migrate();
+
+    var userManager = services.GetRequiredService<UserManager<AppUser>>();
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+    await DbInitializer.SeedRolesAndAdminAsync(userManager, roleManager);
 }
+
+
+//// Test
+//var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+//    .UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+//    .Options;
+
+//using (var context = new ApplicationDbContext(options))
+//{
+//    context.Database.EnsureCreated();
+//}
